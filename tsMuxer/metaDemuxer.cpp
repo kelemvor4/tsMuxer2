@@ -720,6 +720,13 @@ std::vector<StreamDiscoveryData> METADemuxer::discoverStreams() const
                 auto* videoReader = dynamic_cast<MPEGStreamReader*>(tmpReader.get());
                 if (videoReader)
                 {
+                    // Pre-seed the container FPS so that checkStream() has it
+                    // available.  Without this, streams that lack embedded
+                    // timing info would leave fps=0 in the discovery data.
+                    const double containerFps = correctFps(demuxer->getTrackFps(pid));
+                    if (containerFps > 0.0 && videoReader->getFPS() == 0.0)
+                        videoReader->setFPS(containerFps);
+
                     CheckStreamRez rez;
                     // Each video reader has its own checkStream signature
                     if (auto* h264 = dynamic_cast<H264StreamReader*>(videoReader))

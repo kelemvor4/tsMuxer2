@@ -73,7 +73,14 @@ CheckStreamRez HEVCStreamReader::checkStream(uint8_t* buffer, const int len)
                 return rez;
             m_spsPpsFound = true;
             if (m_vps->num_units_in_tick)
-                updateFPS(m_vps, nal, nextNal, 0);
+            {
+                // Lightweight FPS extraction for probing only — the full
+                // updateFPS() (with logging and 25fps fallback) runs later
+                // during actual muxing in intDecodeNAL().
+                const double fps = correctFps(m_vps->getFPS());
+                if (fps > 0.0 && m_fps == 0.0)
+                    setFPS(fps);
+            }
             break;
         case HevcUnit::NalType::SPS:
             if (!m_sps)
@@ -82,7 +89,11 @@ CheckStreamRez HEVCStreamReader::checkStream(uint8_t* buffer, const int len)
             if (m_sps->deserialize() != 0)
                 return rez;
             m_spsPpsFound = true;
-            updateFPS(m_sps, nal, nextNal, 0);
+            {
+                const double fps = correctFps(getStreamFPS(m_sps));
+                if (fps > 0.0 && m_fps == 0.0)
+                    setFPS(fps);
+            }
             break;
         case HevcUnit::NalType::PPS:
             if (!m_pps)

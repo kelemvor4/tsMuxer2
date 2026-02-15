@@ -125,7 +125,14 @@ CheckStreamRez AV1StreamReader::checkStream(uint8_t* buffer, const int len)
         m_seqHdr = candidateSeqHdr;
         m_seqHdrFound = true;
         m_spsPpsFound = true;
-        updateFPS(nullptr, seqHdrNal, seqHdrNextNal, 0);
+        // Lightweight FPS extraction for probing only — the full
+        // updateFPS() (with logging and 25fps fallback) runs later
+        // during actual muxing in intDecodeNAL().
+        {
+            const double fps = correctFps(getStreamFPS(nullptr));
+            if (fps > 0.0 && m_fps == 0.0)
+                setFPS(fps);
+        }
 
         rez.codecInfo = av1CodecInfo;
         ostringstream str;

@@ -20,7 +20,26 @@ class MovDemuxer final : public IOContextDemuxer
     void getTrackList(std::map<int32_t, TrackInfo>& trackList) override;
     int64_t getTrackDelay(const int32_t pid) override
     {
-        return (m_firstTimecode.find(pid) != m_firstTimecode.end()) ? m_firstTimecode[pid] : 0;
+        // Find the video track's edit list delay as the reference point,
+        // then return this track's delay relative to video (in ms).
+        // This matches TS/PS demuxer behavior and ensures audio tracks
+        // get the correct timeshift (e.g. -1000ms) instead of video
+        // getting an absolute delay that is never applied.
+        int64_t videoDelay = 0;
+        for (int i = 0; i < num_tracks; i++)
+        {
+            if (tracks[i]->type == IOContextTrackType::VIDEO)
+            {
+                const auto it = m_firstTimecode.find(i + 1);
+                if (it != m_firstTimecode.end())
+                    videoDelay = it->second;
+                break;
+            }
+        }
+
+        const auto it = m_firstTimecode.find(pid);
+        const int64_t trackDelay = (it != m_firstTimecode.end()) ? it->second : 0;
+        return trackDelay - videoDelay;
     }
     double getTrackFps(uint32_t trackId) override;
     static int readPacket(AVPacket&) { return 0; }

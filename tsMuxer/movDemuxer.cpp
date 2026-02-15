@@ -162,18 +162,37 @@ class MovParsedAudioTrackData final : public ParsedTrackPrivData
         isAAC = false;
     }
 
+    /// Initialise AAC codec defaults from the stsd audio fields so that
+    /// a usable ADTS header can be built even when ESDS data is absent.
+    void initAACDefaults()
+    {
+        m_aacRaw.m_id = 1;  // MPEG-2
+        m_aacRaw.m_layer = 0;
+        m_aacRaw.m_rdb = 0;
+        m_aacRaw.m_profile = 0;  // AAC-LC default (will be refined by readConfig)
+        m_aacRaw.m_channels = static_cast<uint8_t>(m_sc->channels);
+        m_aacRaw.m_sample_rate = m_sc->sample_rate;
+    }
+
     void setPrivData(uint8_t* buff, const int size) override
     {
         m_buff = buff;
         m_size = size;
-        m_aacRaw.m_channels = static_cast<uint8_t>(m_sc->channels);
-        m_aacRaw.m_sample_rate = m_sc->sample_rate;
-        m_aacRaw.m_id = 1;  // MPEG2
-        m_aacRaw.m_profile = 0;
-        if (size > 0)
-            m_aacRaw.m_profile = (buff[0] >> 3) - 1;
-        m_aacRaw.m_layer = 0;
-        m_aacRaw.m_rdb = 0;
+        // Use readConfig to properly parse the AudioSpecificConfig, just like
+        // the Matroska path does.  This correctly sets profile, sample rate,
+        // channel count and channel index in one consistent step.
+        if (size >= 2)
+        {
+            m_aacRaw.m_id = 1;  // MPEG-2
+            m_aacRaw.m_layer = 0;
+            m_aacRaw.m_rdb = 0;
+            m_aacRaw.readConfig(buff, size);
+        }
+        else
+        {
+            // Fallback: use stsd fields when AudioSpecificConfig is too short
+            initAACDefaults();
+        }
     }
 
     void extractData(AVPacket* pkt, uint8_t* buff, const int size) override
@@ -189,7 +208,6 @@ class MovParsedAudioTrackData final : public ParsedTrackPrivData
                 break;
             if (isAAC)
             {
-                m_aacRaw.m_channels = static_cast<uint8_t>(m_sc->channels);
                 m_aacRaw.buildADTSHeader(dst, frameSize + AAC_HEADER_LEN);
                 memcpy(dst + AAC_HEADER_LEN, buff, frameSize);
                 dst += frameSize + AAC_HEADER_LEN;
@@ -1570,6 +1588,13 @@ int MovDemuxer::mov_read_stsd(MOVAtom atom)
             st->type = IOContextTrackType::VIDEO;
             break;
         case MKTAG('m', 'p', '4', 'a'):
+        {
+            st->type = IOContextTrackType::AUDIO;
+            auto* audioData = new MovParsedAudioTrackData(this, st);
+            audioData->isAAC = true;  // mp4a is AAC; ESDS parsing will refine params
+            st->parsed_priv_data = audioData;
+            break;
+        }
         case MKTAG('a', 'c', '-', '3'):
             st->type = IOContextTrackType::AUDIO;
             st->parsed_priv_data = new MovParsedAudioTrackData(this, st);
@@ -1690,6 +1715,16 @@ if (bits_per_sample) {
             skip_bytes(size - (m_processedBytes - start_pos));
         }
 
+        // For mp4a tracks, seed AAC codec defaults from stsd fields so that
+        // a usable ADTS header can be built even if no ESDS atom is found.
+        // ESDS parsing (via sub-atoms below) will refine these if present.
+        if (st->parsed_priv_data)
+        {
+            auto* audioData = dynamic_cast<MovParsedAudioTrackData*>(st->parsed_priv_data);
+            if (audioData && audioData->isAAC)
+                audioData->initAACDefaults();
+        }
+
         // this will read extra atoms at the end (wave, alac, damr, avcC, SMI ...)
         a.size = size - (m_processedBytes - start_pos);
         if (a.size > atom.size)
@@ -1801,7 +1836,7 @@ int MovDemuxer::mov_read_esds(MOVAtom atom)
     mp4_read_descr(&tag);  // len
     if (tag == MP4DecConfigDescrTag)
     {
-        get_byte();  // object_type_id
+        const uint8_t object_type_id = get_byte();
         get_byte();  // stream type
         get_be24();  // buffer size db
         get_be32();  // max bitrate
@@ -1814,12 +1849,20 @@ int MovDemuxer::mov_read_esds(MOVAtom atom)
             st->codec_priv = new unsigned char[len];
             st->codec_priv_size = len;
             get_buffer(st->codec_priv, len);
-            // st->parsed_priv_data = new MovParsedAudioTrackData(this, st);
             if (st->parsed_priv_data)
             {
-                dynamic_cast<MovParsedAudioTrackData*>(st->parsed_priv_data)->isAAC = true;
-                st->parsed_priv_data->setPrivData(st->codec_priv, st->codec_priv_size);
-                st->channels = (st->codec_priv[1] >> 3) & 0x0f;
+                // object_type_id 0x40 = Audio ISO/IEC 14496-3 (AAC)
+                // 0x66/0x67/0x68 = MPEG-2 AAC profiles
+                const bool isAAC = (object_type_id == 0x40 || object_type_id == 0x66 || object_type_id == 0x67 ||
+                                    object_type_id == 0x68);
+                auto* audioData = dynamic_cast<MovParsedAudioTrackData*>(st->parsed_priv_data);
+                if (audioData)
+                {
+                    audioData->isAAC = isAAC;
+                    // setPrivData uses readConfig() to properly parse the
+                    // AudioSpecificConfig (profile, sample rate, channels).
+                    st->parsed_priv_data->setPrivData(st->codec_priv, st->codec_priv_size);
+                }
             }
         }
     }

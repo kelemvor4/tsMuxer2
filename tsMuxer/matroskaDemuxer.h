@@ -19,7 +19,22 @@ class MatroskaDemuxer final : public IOContextDemuxer
     [[nodiscard]] bool isPidFilterSupported() const override { return true; }
     int64_t getTrackDelay(const int32_t pid) override
     {
-        return (m_firstTimecode.find(pid) != m_firstTimecode.end()) ? m_firstTimecode[pid] : 0;
+        if (m_firstTimecode.find(pid) == m_firstTimecode.end())
+            return 0;
+
+        // Find the first video track's timecode as reference point,
+        // matching how TS/PS demuxers compute delay relative to video
+        for (int i = 0; i < num_tracks; i++)
+        {
+            if (tracks[i]->type == IOContextTrackType::VIDEO)
+            {
+                const auto it = m_firstTimecode.find(tracks[i]->num);
+                if (it != m_firstTimecode.end())
+                    return m_firstTimecode[pid] - it->second;
+            }
+        }
+
+        return 0;
     }
     double getTrackFps(uint32_t trackId) override;
     const uint8_t* getTrackCodecPrivate(int32_t pid, int& size) override;
