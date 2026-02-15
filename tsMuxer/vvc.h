@@ -57,7 +57,7 @@ struct VvcUnit
    protected:
     unsigned extractUEGolombCode();
     int extractSEGolombCode();
-    void updateBits(int bitOffset, int bitLen, int value) const;
+    [[nodiscard]] bool updateBits(int bitOffset, int bitLen, int value) const;
     bool dpb_parameters(int MaxSubLayersMinus1, bool subLayerInfoFlag);
     bool general_timing_hrd_parameters(VvcHrdUnit& m_hrd);
     bool ols_timing_hrd_parameters(VvcHrdUnit m_hrd, int firstSubLayer, int MaxSubLayersVal);
@@ -89,7 +89,7 @@ struct VvcVpsUnit : VvcUnitWithProfile
     VvcVpsUnit();
     int deserialize();
     [[nodiscard]] double getFPS() const;
-    void setFPS(double fps);
+    [[nodiscard]] bool setFPS(double fps);
     [[nodiscard]] std::string getDescription() const;
 
     uint8_t vps_id;

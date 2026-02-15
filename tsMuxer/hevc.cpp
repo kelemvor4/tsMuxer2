@@ -62,9 +62,30 @@ int HevcUnit::deserialize()
     }
 }
 
-void HevcUnit::updateBits(const int bitOffset, const int bitLen, const unsigned value) const
+bool HevcUnit::updateBits(const int bitOffset, const int bitLen, const unsigned value) const
 {
-    uint8_t* ptr = m_reader.getBuffer() + bitOffset / 8;
+    // Validate parameters to prevent heap-buffer-overflow (GitHub #897, #898)
+    if (bitOffset < 0 || bitLen <= 0)
+    {
+        LTRACE(LT_WARN, 2,
+               "HEVC updateBits: invalid parameters (bitOffset=" << bitOffset << ", bitLen=" << bitLen << ")");
+        return false;
+    }
+
+    // The BitStreamWriter needs bitLen/8 + 5 bytes from the start position,
+    // and flushBits() reads/writes a 4-byte word at the final position.
+    // Verify the entire write region fits within the NAL buffer.
+    const int startByte = bitOffset / 8;
+    const int requiredEnd = startByte + bitLen / 8 + 5;
+    if (requiredEnd > m_nalBufferLen)
+    {
+        LTRACE(LT_WARN, 2,
+               "HEVC updateBits: write region [" << startByte << ", " << requiredEnd << ") exceeds NAL buffer size "
+                                                 << m_nalBufferLen);
+        return false;
+    }
+
+    uint8_t* ptr = m_reader.getBuffer() + startByte;
     BitStreamWriter bitWriter{};
     const int byteOffset = bitOffset % 8;
     bitWriter.setBuffer(ptr, ptr + (bitLen / 8 + 5));
@@ -85,6 +106,7 @@ void HevcUnit::updateBits(const int bitOffset, const int bitLen, const unsigned 
         bitWriter.putBits(endBitsPostfix, postfix);
     }
     bitWriter.flushBits();
+    return true;
 }
 
 int HevcUnit::serializeBuffer(uint8_t* dstBuffer, const uint8_t* dstEnd) const
@@ -222,14 +244,26 @@ int HevcVpsUnit::deserialize()
     }
 }
 
-void HevcVpsUnit::setFPS(const double fps)
+bool HevcVpsUnit::setFPS(const double fps)
 {
     time_scale = lround(fps) * 1000000;
     num_units_in_tick = lround(time_scale / fps);
 
-    assert(num_units_in_tick_bit_pos > 0);
-    updateBits(num_units_in_tick_bit_pos, 32, num_units_in_tick);
-    updateBits(num_units_in_tick_bit_pos + 32, 32, time_scale);
+    // Guard against missing timing info instead of asserting (GitHub #808, #897, #898)
+    if (num_units_in_tick_bit_pos <= 0)
+    {
+        LTRACE(LT_WARN, 2,
+               "HEVC VPS does not contain timing info (bit_pos=" << num_units_in_tick_bit_pos
+                                                                 << "), cannot override FPS in stream");
+        return false;
+    }
+
+    if (!updateBits(num_units_in_tick_bit_pos, 32, num_units_in_tick))
+        return false;
+    if (!updateBits(num_units_in_tick_bit_pos + 32, 32, time_scale))
+        return false;
+
+    return true;
 }
 
 double HevcVpsUnit::getFPS() const

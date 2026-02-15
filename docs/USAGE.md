@@ -77,6 +77,8 @@ A_AAC             | AAC
 A_DTS             | DTS/DTS-Express/DTS-HD 
 A_MP3             | MPEG audio layer 1/2/3 
 A_LPCM            | raw pcm data or PCM WAV file 
+A_FLAC            | FLAC (MKV and demux output only)
+A_OPUS            | Opus (TS, MKV, and demux output only)
 S_HDMV/PGS        | Presentation graphic stream (BD subtitle format) 
 S_TEXT/UTF8       | SRT subtitle format.  Encoding MUST be  UTF-8/UTF-16/UTF-32 
 

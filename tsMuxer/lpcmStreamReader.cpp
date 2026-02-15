@@ -620,6 +620,22 @@ double LPCMStreamReader::getFrameDuration()
     return 0;
 }
 
+void LPCMStreamReader::fillDiscoveryData(StreamDiscoveryData& data)
+{
+    SimplePacketizerReader::fillDiscoveryData(data);  // sampleRate, channels
+    data.bitsPerSample = m_bitsPerSample;
+}
+
+void LPCMStreamReader::applyDiscoveryData(const StreamDiscoveryData& data)
+{
+    if (data.sampleRate > 0)
+        m_freq = data.sampleRate;
+    if (data.channels > 0)
+        m_channels = static_cast<uint8_t>(data.channels);
+    if (data.bitsPerSample > 0)
+        m_bitsPerSample = static_cast<uint16_t>(data.bitsPerSample);
+}
+
 const std::string LPCMStreamReader::getStreamInfo()
 {
     std::ostringstream str;

@@ -67,6 +67,12 @@ H264StreamReader::~H264StreamReader()
     for (const auto& [index, pps] : m_ppsMap) delete pps;
 }
 
+void H264StreamReader::applyDiscoveryData(const StreamDiscoveryData& data)
+{
+    if (data.fps > 0.0 && m_fps == 0.0)
+        setFPS(data.fps);
+}
+
 CheckStreamRez H264StreamReader::checkStream(uint8_t* buffer, int len)
 {
     SEIUnit lastSEI;

@@ -4,6 +4,22 @@
 #include "vodCoreException.h"
 #include "vod_common.h"
 
+void MLPStreamReader::fillDiscoveryData(StreamDiscoveryData& data)
+{
+    SimplePacketizerReader::fillDiscoveryData(data);  // sampleRate, channels
+    data.bitrate = m_bitrate;
+}
+
+void MLPStreamReader::applyDiscoveryData(const StreamDiscoveryData& data)
+{
+    if (data.sampleRate > 0)
+        m_samplerate = data.sampleRate;
+    if (data.channels > 0)
+        m_channels = static_cast<uint8_t>(data.channels);
+    if (data.bitrate > 0)
+        m_bitrate = data.bitrate;
+}
+
 int MLPStreamReader::getHeaderLen() { return MLP_HEADER_LEN; }
 
 const std::string MLPStreamReader::getStreamInfo()

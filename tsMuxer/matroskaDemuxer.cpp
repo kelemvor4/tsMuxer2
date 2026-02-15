@@ -1391,6 +1391,14 @@ int MatroskaDemuxer::matroska_read_header()
             {
                 track->parsed_priv_data = new ParsedLPCMTrackData(track);
             }
+            else if (!strcmp(track->codec_id, MATROSKA_CODEC_ID_AUDIO_FLAC))
+            {
+                track->parsed_priv_data = new ParsedFLACTrackData(track->codec_priv, track->codec_priv_size);
+            }
+            else if (!strcmp(track->codec_id, MATROSKA_CODEC_ID_AUDIO_OPUS))
+            {
+                track->parsed_priv_data = new ParsedOpusTrackData(track->codec_priv, track->codec_priv_size);
+            }
             else if (!strcmp(track->codec_id, MATROSKA_CODEC_ID_SRT))
             {
                 track->parsed_priv_data = new ParsedSRTTrackData(track->codec_priv, track->codec_priv_size);
@@ -2472,6 +2480,19 @@ double MatroskaDemuxer::getTrackFps(const uint32_t trackId)
     if (track->default_duration > 0)
         return 1000000000.0 / static_cast<double>(track->default_duration);
     return 0.0;
+}
+
+const uint8_t* MatroskaDemuxer::getTrackCodecPrivate(const int32_t pid, int& size)
+{
+    // MKV track IDs are 1-based in our mapping
+    if (pid <= 0 || pid > num_tracks)
+    {
+        size = 0;
+        return nullptr;
+    }
+    const MatroskaTrack* track = tracks[pid - 1];
+    size = track->codec_priv_size;
+    return track->codec_priv;
 }
 
 int MatroskaDemuxer::getTrackType(const MatroskaTrack* track)

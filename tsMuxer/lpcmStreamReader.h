@@ -37,6 +37,8 @@ class LPCMStreamReader final : public SimplePacketizerReader
     int getTSDescriptor(uint8_t* dstBuff, bool blurayMode, bool hdmvDescriptors) override;
     int getFreq() override { return m_freq; }
     uint8_t getChannels() override { return m_channels; }
+    void applyDiscoveryData(const StreamDiscoveryData& data) override;
+    void fillDiscoveryData(StreamDiscoveryData& data) override;
     // void setDemuxMode(bool value) {m_demuxMode = value;}
     void setFirstFrame(const bool value) { m_firstFrame = value; }
     bool beforeFileCloseEvent(File& file) override;

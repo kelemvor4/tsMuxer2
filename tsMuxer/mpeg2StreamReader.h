@@ -22,6 +22,7 @@ class MPEG2StreamReader final : public MPEGStreamReader
     }
     int getTSDescriptor(uint8_t* dstBuff, bool blurayMode, bool hdmvDescriptors) override;
     CheckStreamRez checkStream(uint8_t* buffer, int len);
+    void applyDiscoveryData(const StreamDiscoveryData& data) override;
 
     [[nodiscard]] unsigned getStreamWidth() const override { return m_sequence.width; }
     [[nodiscard]] unsigned getStreamHeight() const override { return m_sequence.height; }

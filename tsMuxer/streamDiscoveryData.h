@@ -1,0 +1,43 @@
+#ifndef STREAM_DISCOVERY_DATA_H_
+#define STREAM_DISCOVERY_DATA_H_
+
+#include <cstdint>
+#include <string>
+#include <vector>
+
+/// Metadata collected during the discovery (probe) phase for a single track.
+/// This is populated by probeStream() / discoverStreams() before the main
+/// mux pipeline starts, so that stream readers have correct properties
+/// (channels, sample rate, resolution, HDR, etc.) from the very first packet.
+struct StreamDiscoveryData
+{
+    // Identity
+    std::string codecName;  // e.g. "A_OPUS", "V_MPEGH/ISO/HEVC"
+    int32_t trackID = 0;
+
+    // Container-level codec private data (OpusHead, FLAC STREAMINFO, AVC SPS/PPS, etc.)
+    std::vector<uint8_t> codecPrivate;
+
+    // Audio properties (filled for audio codecs)
+    int sampleRate = 0;
+    int channels = 0;
+    int bitsPerSample = 0;
+    int bitrate = 0;
+
+    // Video properties (filled for video codecs)
+    int width = 0;
+    int height = 0;
+    double fps = 0.0;
+    bool interlaced = false;
+    int hdrType = 0;  // maps to getStreamHDR() return values
+    int profile = 0;
+    int level = 0;
+
+    // Stream description string (from getStreamInfo())
+    std::string streamDescr;
+
+    // True if the probe phase succeeded for this track
+    bool discovered = false;
+};
+
+#endif

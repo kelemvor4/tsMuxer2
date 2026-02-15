@@ -27,6 +27,7 @@ class MovDemuxer final : public IOContextDemuxer
     void setFileIterator(FileNameIterator* itr) override;
     [[nodiscard]] bool isPidFilterSupported() const override { return true; }
     [[nodiscard]] int64_t getFileDurationNano() const override;
+    const uint8_t* getTrackCodecPrivate(int32_t pid, int& size) override;
 
    private:
     struct MOVAtom

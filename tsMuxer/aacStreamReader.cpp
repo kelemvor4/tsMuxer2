@@ -2,6 +2,22 @@
 #include "nalUnits.h"
 #include "vodCoreException.h"
 
+void AACStreamReader::fillDiscoveryData(StreamDiscoveryData& data)
+{
+    SimplePacketizerReader::fillDiscoveryData(data);  // sampleRate, channels
+    data.bitrate = m_bit_rate;
+}
+
+void AACStreamReader::applyDiscoveryData(const StreamDiscoveryData& data)
+{
+    if (data.sampleRate > 0)
+        m_sample_rate = data.sampleRate;
+    if (data.channels > 0)
+        m_channels = static_cast<uint8_t>(data.channels);
+    if (data.bitrate > 0)
+        m_bit_rate = data.bitrate;
+}
+
 int AACStreamReader::getHeaderLen() { return AAC_HEADER_LEN; }
 
 const std::string AACStreamReader::getStreamInfo()

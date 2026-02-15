@@ -184,7 +184,7 @@ int SimplePacketizerReader::readPacket(AVPacket& avPacket)
         }
         avPacket.data = m_curPos;
         avPacket.data += skipBeforeBytes;
-        if (frameLen > MAX_AV_PACKET_SIZE)
+        if (frameLen > getMaxFrameSize())
             THROW(ERR_AV_FRAME_TOO_LARGE, "AV frame too large (" << frameLen << " bytes). Increase AV buffer.")
         avPacket.size = frameLen;
         if (isPriorityData(&avPacket))
@@ -227,6 +227,32 @@ int SimplePacketizerReader::readPacket(AVPacket& avPacket)
         return 0;
 
     } while (true);
+}
+
+StreamDiscoveryData SimplePacketizerReader::probeStream(uint8_t* buffer, const int len,
+                                                        const ContainerType containerType, const int containerDataType,
+                                                        const int containerStreamIndex)
+{
+    StreamDiscoveryData data;
+    const CheckStreamRez rez = checkStream(buffer, len, containerType, containerDataType, containerStreamIndex);
+    if (!rez.codecInfo.codecID)
+        return data;  // detection failed – return empty data
+
+    data.discovered = true;
+    data.codecName = rez.codecInfo.programName;
+    data.streamDescr = rez.streamDescr;
+
+    // Let the concrete reader fill in codec-specific fields.
+    fillDiscoveryData(data);
+
+    return data;
+}
+
+void SimplePacketizerReader::fillDiscoveryData(StreamDiscoveryData& data)
+{
+    // Base implementation fills common audio fields.
+    data.sampleRate = getFreq();
+    data.channels = getChannels();
 }
 
 static constexpr int CHECK_FRAMES_COUNT = 10;

@@ -22,6 +22,7 @@ class MatroskaDemuxer final : public IOContextDemuxer
         return (m_firstTimecode.find(pid) != m_firstTimecode.end()) ? m_firstTimecode[pid] : 0;
     }
     double getTrackFps(uint32_t trackId) override;
+    const uint8_t* getTrackCodecPrivate(int32_t pid, int& size) override;
 
     [[nodiscard]] int64_t getFileDurationNano() const override { return fileDuration; }
 

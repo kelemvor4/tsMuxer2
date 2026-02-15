@@ -11,6 +11,7 @@
 #include "abstractStreamReader.h"
 #include "avPacket.h"
 #include "bufferedReaderManager.h"
+#include "streamDiscoveryData.h"
 #include "vodCoreException.h"
 
 // META file demuxer
@@ -135,8 +136,15 @@ class ContainerToReaderWrapper final : public AbstractReader
     void terminate();
     std::map<std::string, DemuxerData> m_demuxers;
 
+    /// Retrieve the track's codec-private blob via the underlying demuxer.
+    /// @param readerID  The reader ID used when the stream was registered.
+    /// @param[out] size  Receives the codec-private size.
+    /// @returns  Pointer to the blob, or nullptr if unavailable.
+    const uint8_t* getTrackCodecPrivate(uint32_t readerID, int& size);
+
    private:
     int64_t m_discardedSize;
+
     int32_t m_readerCnt;
     size_t m_readBuffOffset;
     const BufferedReaderManager& m_readManager;
@@ -171,6 +179,13 @@ class METADemuxer final : public AbstractDemuxer
     static DetectStreamRez DetectStreamReader(const BufferedReaderManager& readManager, const std::string& fileName,
                                               bool calcDuration);
     std::vector<StreamInfo>& getCodecInfo() { return m_codecInfo; }
+
+    /// Run a self-contained discovery pass: for every track in m_codecInfo,
+    /// open a temporary demuxer, probe the first few frames, and return a
+    /// vector of StreamDiscoveryData (indexed the same as m_codecInfo).
+    /// All temporary I/O is closed before the function returns.
+    std::vector<StreamDiscoveryData> discoverStreams() const;
+
     int getLastReadRez() override { return m_lastReadRez; }
     [[nodiscard]] int64_t totalSize() const { return m_totalSize; }
     static std::string mplsTrackToFullName(const std::string& mplsFileName, const std::string& mplsNum);

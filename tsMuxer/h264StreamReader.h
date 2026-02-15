@@ -27,6 +27,7 @@ class H264StreamReader final : public MPEGStreamReader
     void setForceLevel(const uint8_t value) { m_forcedLevel = value; }
     int getTSDescriptor(uint8_t* dstBuff, bool blurayMode, bool hdmvDescriptors) override;
     CheckStreamRez checkStream(uint8_t* buffer, int len);
+    void applyDiscoveryData(const StreamDiscoveryData& data) override;
     void setH264SPSCont(const bool val) { m_h264SPSCont = val; }
 
     void setInsertSEI(const SeiMethod value) { m_insertSEIMethod = value; }

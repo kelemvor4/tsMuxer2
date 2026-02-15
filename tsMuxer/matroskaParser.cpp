@@ -512,6 +512,78 @@ void ParsedSRTTrackData::extractData(AVPacket* pkt, uint8_t* buff, const int siz
     memcpy(pkt->data + prefix.length() + size, postfix.c_str(), postfix.length());
 }
 
+// ------------ FLAC ---------------
+ParsedFLACTrackData::ParsedFLACTrackData(uint8_t* buff, const int size)
+    : ParsedTrackPrivData(buff, size), m_firstPacket(true)
+{
+    // Store the CodecPrivate data (fLaC marker + metadata blocks).
+    if (buff && size > 0)
+        m_codecPrivate.assign(buff, buff + size);
+}
+
+void ParsedFLACTrackData::extractData(AVPacket* pkt, uint8_t* buff, const int size)
+{
+    if (m_firstPacket && !m_codecPrivate.empty())
+    {
+        // Prepend the CodecPrivate (fLaC + STREAMINFO) before the first FLAC frame
+        // so the stream reader can parse it via findFrame().
+        m_firstPacket = false;
+        const int privSize = static_cast<int>(m_codecPrivate.size());
+        pkt->size = privSize + size;
+        pkt->data = new uint8_t[pkt->size];
+        memcpy(pkt->data, m_codecPrivate.data(), privSize);
+        memcpy(pkt->data + privSize, buff, size);
+    }
+    else
+    {
+        // Subsequent frames: pass through unchanged.
+        pkt->size = size;
+        pkt->data = new uint8_t[size];
+        memcpy(pkt->data, buff, size);
+    }
+}
+
+// ------------ Opus ---------------
+ParsedOpusTrackData::ParsedOpusTrackData(uint8_t* buff, const int size)
+    : ParsedTrackPrivData(buff, size), m_firstPacket(true)
+{
+    if (buff && size > 0)
+        m_codecPrivate.assign(buff, buff + size);
+}
+
+void ParsedOpusTrackData::extractData(AVPacket* pkt, uint8_t* buff, const int size)
+{
+    // Each Opus packet is prefixed with a 4-byte big-endian length so that
+    // OpusStreamReader can find frame boundaries (Opus has no sync codes).
+    static constexpr int PREFIX = 4;
+
+    if (m_firstPacket && !m_codecPrivate.empty())
+    {
+        // First packet: prepend raw OpusHead so the stream reader can parse it.
+        m_firstPacket = false;
+        const int privSize = static_cast<int>(m_codecPrivate.size());
+        pkt->size = privSize + PREFIX + size;
+        pkt->data = new uint8_t[pkt->size];
+        memcpy(pkt->data, m_codecPrivate.data(), privSize);
+        // Length prefix for the Opus audio packet
+        pkt->data[privSize] = static_cast<uint8_t>((size >> 24) & 0xFF);
+        pkt->data[privSize + 1] = static_cast<uint8_t>((size >> 16) & 0xFF);
+        pkt->data[privSize + 2] = static_cast<uint8_t>((size >> 8) & 0xFF);
+        pkt->data[privSize + 3] = static_cast<uint8_t>(size & 0xFF);
+        memcpy(pkt->data + privSize + PREFIX, buff, size);
+    }
+    else
+    {
+        pkt->size = PREFIX + size;
+        pkt->data = new uint8_t[pkt->size];
+        pkt->data[0] = static_cast<uint8_t>((size >> 24) & 0xFF);
+        pkt->data[1] = static_cast<uint8_t>((size >> 16) & 0xFF);
+        pkt->data[2] = static_cast<uint8_t>((size >> 8) & 0xFF);
+        pkt->data[3] = static_cast<uint8_t>(size & 0xFF);
+        memcpy(pkt->data + PREFIX, buff, size);
+    }
+}
+
 // ------------ PG ---------------
 void ParsedPGTrackData::extractData(AVPacket* pkt, uint8_t* buff, const int size)
 {

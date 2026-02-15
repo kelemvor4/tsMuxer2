@@ -351,3 +351,12 @@ void MPEGStreamReader::fillAspectBySAR(const double sar)
         }
     }
 }
+
+void MPEGStreamReader::fillVideoDiscoveryData(StreamDiscoveryData& data)
+{
+    data.width = static_cast<int>(getStreamWidth());
+    data.height = static_cast<int>(getStreamHeight());
+    data.fps = m_fps;
+    data.interlaced = getInterlaced();
+    data.hdrType = getStreamHDR();
+}

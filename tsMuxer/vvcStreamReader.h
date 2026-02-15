@@ -16,6 +16,7 @@ class VVCStreamReader final : public MPEGStreamReader
     ~VVCStreamReader() override;
     int getTSDescriptor(uint8_t* dstBuff, bool blurayMode, bool hdmvDescriptors) override;
     CheckStreamRez checkStream(uint8_t* buffer, int len);
+    void applyDiscoveryData(const StreamDiscoveryData& data) override;
     [[nodiscard]] bool needSPSForSplit() const override { return false; }
 
    protected:

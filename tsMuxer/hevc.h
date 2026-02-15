@@ -57,7 +57,7 @@ struct HevcUnit
    protected:
     unsigned extractUEGolombCode();
     int extractSEGolombCode();
-    void updateBits(int bitOffset, int bitLen, unsigned value) const;
+    [[nodiscard]] bool updateBits(int bitOffset, int bitLen, unsigned value) const;
 
     uint8_t* m_nalBuffer;
     int m_nalBufferLen;
@@ -82,7 +82,7 @@ struct HevcVpsUnit : HevcUnitWithProfile
     HevcVpsUnit();
     int deserialize();
     [[nodiscard]] double getFPS() const;
-    void setFPS(double fps);
+    [[nodiscard]] bool setFPS(double fps);
     [[nodiscard]] std::string getDescription() const;
 
     int vps_id;

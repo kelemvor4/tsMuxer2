@@ -51,6 +51,8 @@ class DTSStreamReader final : public SimplePacketizerReader
     void setNewStyleAudioPES(const bool value) { m_useNewStyleAudioPES = value; }
     int getFreq() override { return hd_pi_sample_rate ? hd_pi_sample_rate : pi_sample_rate; }
     uint8_t getChannels() override { return hd_pi_channels ? hd_pi_channels : pi_channels; }
+    void applyDiscoveryData(const StreamDiscoveryData& data) override;
+    void fillDiscoveryData(StreamDiscoveryData& data) override;
     bool isPriorityData(AVPacket* packet) override;
     bool isIFrame(AVPacket* packet) override { return isPriorityData(packet); }
     void setTestMode(const bool value) override { m_testMode = value; }

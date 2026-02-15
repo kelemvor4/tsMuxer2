@@ -14,6 +14,7 @@
 #include "av1StreamReader.h"
 #include "avCodecs.h"
 #include "dtsStreamReader.h"
+#include "flacStreamReader.h"
 #include "h264StreamReader.h"
 #include "hevc.h"
 #include "hevcStreamReader.h"
@@ -21,6 +22,7 @@
 #include "matroskaParser.h"
 #include "muxerManager.h"
 #include "nalUnits.h"
+#include "opusStreamReader.h"
 #include "simplePacketizerReader.h"
 #include "vodCoreException.h"
 #include "vvc.h"
@@ -233,6 +235,10 @@ std::string MatroskaMuxer::codecNameToMatroskaID(const std::string& codecName, i
         return MATROSKA_CODEC_ID_AUDIO_TRUEHD;
     if (codecName == "A_MP3")
         return MATROSKA_CODEC_ID_AUDIO_MPEG_L3;
+    if (codecName == "A_FLAC")
+        return MATROSKA_CODEC_ID_AUDIO_FLAC;
+    if (codecName == "A_OPUS")
+        return MATROSKA_CODEC_ID_AUDIO_OPUS;
 
     // Subtitles
     if (codecName == "S_TEXT/UTF8")
@@ -581,6 +587,20 @@ void MatroskaMuxer::buildCodecPrivate(MkvTrackInfo& track)
     case CODEC_A_AAC:
         track.codecPrivate = buildAACConfig(track.codecReader);
         break;
+    case CODEC_A_FLAC:
+    {
+        const auto flac = dynamic_cast<FLACStreamReader*>(track.codecReader);
+        if (flac && !flac->getCodecPrivate().empty())
+            track.codecPrivate = flac->getCodecPrivate();
+        break;
+    }
+    case CODEC_A_OPUS:
+    {
+        const auto opus = dynamic_cast<OpusStreamReader*>(track.codecReader);
+        if (opus && !opus->getCodecPrivate().empty())
+            track.codecPrivate = opus->getCodecPrivate();
+        break;
+    }
     default:
         // AC3, DTS, LPCM, SRT, PGS, MPEG-2, VC-1 etc. – no codec private needed in MKV
         // (or it's handled differently)

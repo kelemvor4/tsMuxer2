@@ -126,6 +126,15 @@ class AbstractDemuxer
     [[nodiscard]] virtual std::vector<AVChapter> getChapters() { return {}; }
     [[nodiscard]] virtual double getTrackFps(uint32_t trackId) { return 0.0; }
 
+    /// Return a pointer to the track's codec-private (extradata) blob and its
+    /// size.  The default implementation returns nullptr/0 for demuxers that do
+    /// not expose this information.
+    virtual const uint8_t* getTrackCodecPrivate(int32_t pid, int& size)
+    {
+        size = 0;
+        return nullptr;
+    }
+
     [[nodiscard]] SubTrackFilter* getPidFilter(const int pid)
     {
         const PIDFilters::const_iterator itr = m_pidFilters.find(pid);

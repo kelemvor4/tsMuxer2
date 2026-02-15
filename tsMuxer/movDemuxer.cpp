@@ -976,6 +976,19 @@ void MovDemuxer::getTrackList(std::map<int32_t, TrackInfo>& trackList)
     }
 }
 
+const uint8_t* MovDemuxer::getTrackCodecPrivate(const int32_t pid, int& size)
+{
+    // MOV/MP4 track PIDs are 1-based (see getTrackList)
+    if (pid <= 0 || pid > num_tracks)
+    {
+        size = 0;
+        return nullptr;
+    }
+    const Track* track = tracks[pid - 1];
+    size = track->codec_priv_size;
+    return track->codec_priv;
+}
+
 int MovDemuxer::ParseTableEntry(MOVAtom atom)
 {
     switch (atom.type)

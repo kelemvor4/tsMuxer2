@@ -3,6 +3,7 @@
 
 #include "abstractStreamReader.h"
 #include "limits.h"
+#include "streamDiscoveryData.h"
 #include "vod_common.h"
 
 static constexpr int TMP_BUFFER_SIZE = 1024 * 1024 * 8;
@@ -58,6 +59,13 @@ class MPEGStreamReader : public AbstractStreamReader
     virtual bool getInterlaced() = 0;
     void setRemovePulldown(const bool value) { m_removePulldown = value; }
     virtual int getFrameDepth() { return 1; }
+
+    /// Probe a buffer of elementary stream data and populate a
+    /// StreamDiscoveryData struct with video-specific properties.
+    /// Subclasses must implement checkStream() with their own signature;
+    /// this helper fills common video fields after a successful check.
+    void fillVideoDiscoveryData(StreamDiscoveryData& data);
+
     virtual void onShiftBuffer(int offset);
 
    protected:

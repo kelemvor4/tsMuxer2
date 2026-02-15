@@ -50,6 +50,12 @@ void AV1StreamReader::incTimings()
 // checkStream - detect AV1 stream from elementary data
 // ---------------------------------------------------------------------------
 
+void AV1StreamReader::applyDiscoveryData(const StreamDiscoveryData& data)
+{
+    if (data.fps > 0.0 && m_fps == 0.0)
+        setFPS(data.fps);
+}
+
 CheckStreamRez AV1StreamReader::checkStream(uint8_t* buffer, const int len)
 {
     CheckStreamRez rez;

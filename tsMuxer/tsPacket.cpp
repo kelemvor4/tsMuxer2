@@ -337,7 +337,16 @@ bool TS_program_map_section::deserialize(uint8_t* buffer, const int buf_size)
                 LTRACE(LT_WARN, 0, "Bad PMT table. skipped");
                 return false;
             }
-            extractDescriptors(curPos, es_info_len, pmtStreamInfo);
+            const uint32_t regId = extractDescriptors(curPos, es_info_len, pmtStreamInfo);
+
+            // Identify PRIVATE_DATA streams by their registration descriptor.
+            // 'Opus' (0x4F707573) registration identifies Opus audio.
+            if (stream_type == StreamType::PRIVATE_DATA && regId == 0x4F707573 /* 'Opus' */)
+            {
+                audio_pid = elementary_pid;
+                audio_type = static_cast<int>(stream_type);
+            }
+
             pidList[elementary_pid] = pmtStreamInfo;
             curPos += es_info_len;
         }
@@ -353,8 +362,9 @@ bool TS_program_map_section::deserialize(uint8_t* buffer, const int buf_size)
     }
 }
 
-void TS_program_map_section::extractDescriptors(uint8_t* curPos, const int es_info_len, PMTStreamInfo& pmtInfo)
+uint32_t TS_program_map_section::extractDescriptors(uint8_t* curPos, const int es_info_len, PMTStreamInfo& pmtInfo)
 {
+    uint32_t registrationId = 0;
     const uint8_t* end = curPos + es_info_len;
     while (curPos < end)
     {
@@ -363,12 +373,19 @@ void TS_program_map_section::extractDescriptors(uint8_t* curPos, const int es_in
         curPos += 2;
         const uint8_t* descrBuf = curPos;
 
-        if (tag == TSDescriptorTag::LANG)
+        if (tag == TSDescriptorTag::LANG && len >= 3)
         {
             for (int i = 0; i < 3; i++) pmtInfo.m_lang[i] = static_cast<char>(descrBuf[i]);
         }
+        else if (tag == TSDescriptorTag::REGISTRATION && len >= 4)
+        {
+            // format_identifier is 4 bytes (stored as-is, not byte-swapped)
+            registrationId = (static_cast<uint32_t>(descrBuf[0]) << 24) | (static_cast<uint32_t>(descrBuf[1]) << 16) |
+                             (static_cast<uint32_t>(descrBuf[2]) << 8) | static_cast<uint32_t>(descrBuf[3]);
+        }
         curPos += len;
     }
+    return registrationId;
 }
 
 uint32_t TS_program_map_section::serialize(uint8_t* buffer, const int max_buf_size, const bool blurayMode,
@@ -463,7 +480,23 @@ uint32_t TS_program_map_section::serialize(uint8_t* buffer, const int max_buf_si
         bitWriter.putBits(12, 0);  // es_info_len
         const unsigned beforeCount = bitWriter.getBitsCount() / 8;
 
-        for (int j = 0; j < si.m_esInfoLen; j++) bitWriter.putBits(8, si.m_esInfoData[j]);  // es_info_len
+        // For codecs whose stream info (e.g. channel count) may not have been
+        // available at intAddStream() time, re-query the codec reader now so the
+        // PMT always contains up-to-date descriptors.  This is needed for Opus
+        // when the OpusHead is parsed after the initial PMT write.
+        int curEsInfoLen = si.m_esInfoLen;
+        const uint8_t* curEsInfoData = si.m_esInfoData;
+        uint8_t refreshedDescr[128];
+        if (si.m_codecReader != nullptr)
+        {
+            const int freshLen = si.m_codecReader->getTSDescriptor(refreshedDescr, blurayMode, hdmvDescriptors);
+            if (freshLen > 0)
+            {
+                curEsInfoLen = freshLen;
+                curEsInfoData = refreshedDescr;
+            }
+        }
+        for (int j = 0; j < curEsInfoLen; j++) bitWriter.putBits(8, curEsInfoData[j]);
 
         if (*si.m_lang && !blurayMode)
         {

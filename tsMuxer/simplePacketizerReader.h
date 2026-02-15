@@ -18,6 +18,14 @@ class SimplePacketizerReader : public AbstractStreamReader
     int64_t getProcessedSize() override;
     virtual CheckStreamRez checkStream(uint8_t* buffer, int len, ContainerType containerType, int containerDataType,
                                        int containerStreamIndex);
+
+    /// Enhanced detection: runs checkStream(), then extracts codec-specific
+    /// properties (channels, sample rate, resolution, etc.) into a
+    /// StreamDiscoveryData struct.  Subclasses override fillDiscoveryData()
+    /// to add codec-specific fields.
+    StreamDiscoveryData probeStream(uint8_t* buffer, int len, ContainerType containerType, int containerDataType,
+                                    int containerStreamIndex);
+
     virtual int getFreq() = 0;
     virtual int getAltFreq() { return getFreq(); }
     virtual uint8_t getChannels() = 0;
@@ -37,6 +45,10 @@ class SimplePacketizerReader : public AbstractStreamReader
     // split point can be on any frame
     virtual bool isIFrame(AVPacket* packet) { return true; }
 
+    /// Maximum frame size (bytes) that readPacket will accept.
+    /// Override for codecs whose frames can exceed MAX_AV_PACKET_SIZE (e.g. FLAC).
+    virtual int getMaxFrameSize() { return MAX_AV_PACKET_SIZE; }
+
    protected:
     virtual int getHeaderLen() = 0;  // return fixed frame header size at bytes
     virtual int decodeFrame(uint8_t* buff, uint8_t* end, int& skipBytes,
@@ -46,6 +58,12 @@ class SimplePacketizerReader : public AbstractStreamReader
     virtual const std::string getStreamInfo() = 0;
     virtual void setTestMode(bool value) {}
     [[nodiscard]] virtual bool needMPLSCorrection() const { return true; }
+
+    /// Called by probeStream() after a successful checkStream() to let each
+    /// codec fill codec-specific fields in the discovery data.  Override in
+    /// subclasses.  The base implementation fills sampleRate and channels.
+    virtual void fillDiscoveryData(StreamDiscoveryData& data);
+
     virtual bool needSkipFrame(const AVPacket& packet) { return false; }
 
     // uint8_t* m_tmpBuffer;

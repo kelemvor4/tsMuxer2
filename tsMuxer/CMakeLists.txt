@@ -21,6 +21,7 @@ add_executable (tsmuxer
   convertUTF.cpp
   dtsStreamReader.cpp
   dvbSubStreamReader.cpp
+  flacStreamReader.cpp
   h264StreamReader.cpp
   hevc.cpp
   hevcStreamReader.cpp
@@ -42,6 +43,7 @@ add_executable (tsmuxer
   mpegVideo.cpp
   muxerManager.cpp
   nalUnits.cpp
+  opusStreamReader.cpp
   pesPacket.cpp
   programStreamDemuxer.cpp
   pgsStreamReader.cpp

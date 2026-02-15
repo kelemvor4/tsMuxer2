@@ -69,6 +69,12 @@ int MPEG2StreamReader::getTSDescriptor(uint8_t* dstBuff, bool blurayMode, bool h
     return 10;  // total descriptor length
 }
 
+void MPEG2StreamReader::applyDiscoveryData(const StreamDiscoveryData& data)
+{
+    if (data.fps > 0.0 && m_fps == 0.0)
+        setFPS(data.fps);
+}
+
 CheckStreamRez MPEG2StreamReader::checkStream(uint8_t* buffer, int len)
 {
     CheckStreamRez rez;

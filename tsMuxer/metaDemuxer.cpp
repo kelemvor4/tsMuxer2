@@ -15,6 +15,7 @@
 #include "combinedH264Demuxer.h"
 #include "dtsStreamReader.h"
 #include "dvbSubStreamReader.h"
+#include "flacStreamReader.h"
 #include "h264StreamReader.h"
 #include "hevcStreamReader.h"
 #include "lpcmStreamReader.h"
@@ -24,6 +25,7 @@
 #include "mpeg2StreamReader.h"
 #include "mpegAudioStreamReader.h"
 #include "mpegStreamReader.h"
+#include "opusStreamReader.h"
 #include "pgsStreamReader.h"
 #include "programStreamDemuxer.h"
 #include "srtStreamReader.h"
@@ -574,6 +576,255 @@ void METADemuxer::readClose()
     m_codecInfo.clear();
 }
 
+// ---------------------------------------------------------------------------
+// Discovery phase — self-contained probe of all tracks
+// ---------------------------------------------------------------------------
+
+std::vector<StreamDiscoveryData> METADemuxer::discoverStreams() const
+{
+    const size_t trackCount = m_codecInfo.size();
+    std::vector<StreamDiscoveryData> results(trackCount);
+
+    // Group tracks by their source file so we only open each container once.
+    // key = first file name, value = list of (index-into-m_codecInfo, pid)
+    std::map<std::string, std::vector<std::pair<size_t, int>>> fileToTracks;
+    for (size_t idx = 0; idx < trackCount; ++idx)
+    {
+        const StreamInfo& si = m_codecInfo[idx];
+        fileToTracks[si.m_streamName].emplace_back(idx, si.m_pid);
+    }
+
+    for (const auto& [fileName, trackList] : fileToTracks)
+    {
+        const string unquoted = unquoteStr(fileName);
+        const string fileExt = strToLowerCase(extractFileExt(unquoted));
+
+        // --- Determine container type and create a temporary demuxer ---
+        std::unique_ptr<AbstractDemuxer> demuxer;
+        auto containerType = AbstractStreamReader::ContainerType::ctNone;
+
+        if (fileExt == "m2ts" || fileExt == "mts" || fileExt == "ssif")
+        {
+            demuxer = std::make_unique<TSDemuxer>(m_readManager, "");
+            containerType = AbstractStreamReader::ContainerType::ctM2TS;
+        }
+        else if (fileExt == "ts")
+        {
+            demuxer = std::make_unique<TSDemuxer>(m_readManager, "");
+            containerType = AbstractStreamReader::ContainerType::ctTS;
+        }
+        else if (fileExt == "vob" || fileExt == "mpg")
+        {
+            demuxer = std::make_unique<ProgramStreamDemuxer>(m_readManager);
+            containerType = AbstractStreamReader::ContainerType::ctVOB;
+        }
+        else if (fileExt == "evo")
+        {
+            demuxer = std::make_unique<ProgramStreamDemuxer>(m_readManager);
+            containerType = AbstractStreamReader::ContainerType::ctEVOB;
+        }
+        else if (fileExt == "mkv" || fileExt == "mka" || fileExt == "mks")
+        {
+            demuxer = std::make_unique<MatroskaDemuxer>(m_readManager);
+            containerType = AbstractStreamReader::ContainerType::ctMKV;
+        }
+        else if (fileExt == "mp4" || fileExt == "m4v" || fileExt == "m4a" || fileExt == "mov")
+        {
+            demuxer = std::make_unique<MovDemuxer>(m_readManager);
+            containerType = AbstractStreamReader::ContainerType::ctMOV;
+        }
+
+        if (demuxer)
+        {
+            // Open and demux initial data
+            try
+            {
+                demuxer->openFile(fileName);
+            }
+            catch (...)
+            {
+                // If the file can't be opened, skip discovery for tracks in this file
+                continue;
+            }
+
+            const uint32_t fileBlockSize = demuxer->getFileBlockSize();
+            DemuxedData demuxedData;
+            std::map<int32_t, TrackInfo> acceptedPidMap;
+            demuxer->getTrackList(acceptedPidMap);
+            PIDSet acceptedPidSet;
+            for (const auto& [pid, info] : acceptedPidMap) acceptedPidSet.insert(pid);
+            int64_t discardedSize = 0;
+
+            for (unsigned i = 0; i < DETECT_STREAM_BUFFER_SIZE / fileBlockSize; i++)
+                demuxer->simpleDemuxBlock(demuxedData, acceptedPidSet, discardedSize);
+
+            // For each track of interest in this file, probe
+            for (const auto& [idx, pid] : trackList)
+            {
+                const StreamInfo& si = m_codecInfo[idx];
+                StreamDiscoveryData& dd = results[idx];
+                dd.codecName = si.m_codec;
+                dd.trackID = pid;
+
+                // 1) Extract codec-private from the container
+                int cpSize = 0;
+                const uint8_t* cp = demuxer->getTrackCodecPrivate(pid, cpSize);
+                if (cp && cpSize > 0)
+                    dd.codecPrivate.assign(cp, cp + cpSize);
+
+                // 2) Get the demuxed elementary stream data for this PID
+                auto demuxIt = demuxedData.find(pid);
+                if (demuxIt == demuxedData.end() || demuxIt->second.size() == 0)
+                {
+                    // No data demuxed for this track -- skip probe
+                    continue;
+                }
+                StreamData& vect = demuxIt->second;
+
+                // 3) Create a temporary reader and probe
+                int containerDataType = 0;
+                int containerStreamIndex = 0;
+                if (acceptedPidMap.find(pid) != acceptedPidMap.end())
+                    containerDataType = acceptedPidMap[pid].m_trackType;
+
+                // Use detectTrackReader-style probing: try each reader type
+                // Actually, we know the codec from the meta file, so create directly
+                std::unique_ptr<AbstractStreamReader> tmpReader;
+                try
+                {
+                    tmpReader.reset(
+                        createCodec(si.m_codec, si.m_addParams, si.m_streamName, std::vector<MPLSPlayItem>()));
+                }
+                catch (...)
+                {
+                    continue;
+                }
+                if (!tmpReader)
+                    continue;
+
+                // Try as SimplePacketizerReader (audio codecs)
+                auto* audioReader = dynamic_cast<SimplePacketizerReader*>(tmpReader.get());
+                if (audioReader)
+                {
+                    dd = audioReader->probeStream(vect.data(), static_cast<int>(vect.size()), containerType,
+                                                  containerDataType, containerStreamIndex);
+                    dd.codecName = si.m_codec;
+                    dd.trackID = pid;
+                    // Restore codec-private (probeStream doesn't know about container data)
+                    if (dd.codecPrivate.empty() && cp && cpSize > 0)
+                        dd.codecPrivate.assign(cp, cp + cpSize);
+                    continue;
+                }
+
+                // Try as MPEGStreamReader (video codecs)
+                auto* videoReader = dynamic_cast<MPEGStreamReader*>(tmpReader.get());
+                if (videoReader)
+                {
+                    CheckStreamRez rez;
+                    // Each video reader has its own checkStream signature
+                    if (auto* h264 = dynamic_cast<H264StreamReader*>(videoReader))
+                        rez = h264->checkStream(vect.data(), static_cast<int>(vect.size()));
+                    else if (auto* hevc = dynamic_cast<HEVCStreamReader*>(videoReader))
+                        rez = hevc->checkStream(vect.data(), static_cast<int>(vect.size()));
+                    else if (auto* vvc = dynamic_cast<VVCStreamReader*>(videoReader))
+                        rez = vvc->checkStream(vect.data(), static_cast<int>(vect.size()));
+                    else if (auto* av1 = dynamic_cast<AV1StreamReader*>(videoReader))
+                        rez = av1->checkStream(vect.data(), static_cast<int>(vect.size()));
+                    else if (auto* mpeg2 = dynamic_cast<MPEG2StreamReader*>(videoReader))
+                        rez = mpeg2->checkStream(vect.data(), static_cast<int>(vect.size()));
+
+                    if (rez.codecInfo.codecID)
+                    {
+                        dd.discovered = true;
+                        dd.codecName = si.m_codec;
+                        dd.trackID = pid;
+                        dd.streamDescr = rez.streamDescr;
+                        videoReader->fillVideoDiscoveryData(dd);
+                        // Restore codec-private from container
+                        if (dd.codecPrivate.empty() && cp && cpSize > 0)
+                            dd.codecPrivate.assign(cp, cp + cpSize);
+                    }
+                }
+            }
+            // demuxer goes out of scope and is destroyed
+        }
+        else
+        {
+            // Raw elementary stream (not in a container)
+            for (const auto& [idx, pid] : trackList)
+            {
+                const StreamInfo& si = m_codecInfo[idx];
+                StreamDiscoveryData& dd = results[idx];
+                dd.codecName = si.m_codec;
+                dd.trackID = pid;
+
+                // Read raw bytes from the file
+                File file;
+                if (!file.open(unquoted.c_str(), File::ofRead))
+                    continue;
+
+                auto tmpBuffer = std::make_unique<uint8_t[]>(DETECT_STREAM_BUFFER_SIZE);
+                const int len = file.read(tmpBuffer.get(), DETECT_STREAM_BUFFER_SIZE);
+                file.close();
+                if (len <= 0)
+                    continue;
+
+                // Create a temporary reader and probe
+                std::unique_ptr<AbstractStreamReader> tmpReader;
+                try
+                {
+                    tmpReader.reset(
+                        createCodec(si.m_codec, si.m_addParams, si.m_streamName, std::vector<MPLSPlayItem>()));
+                }
+                catch (...)
+                {
+                    continue;
+                }
+                if (!tmpReader)
+                    continue;
+
+                auto* audioReader = dynamic_cast<SimplePacketizerReader*>(tmpReader.get());
+                if (audioReader)
+                {
+                    dd = audioReader->probeStream(tmpBuffer.get(), len, containerType, 0, 0);
+                    dd.codecName = si.m_codec;
+                    dd.trackID = pid;
+                    continue;
+                }
+
+                auto* videoReader = dynamic_cast<MPEGStreamReader*>(tmpReader.get());
+                if (videoReader)
+                {
+                    CheckStreamRez rez;
+                    if (auto* h264 = dynamic_cast<H264StreamReader*>(videoReader))
+                        rez = h264->checkStream(tmpBuffer.get(), len);
+                    else if (auto* hevc = dynamic_cast<HEVCStreamReader*>(videoReader))
+                        rez = hevc->checkStream(tmpBuffer.get(), len);
+                    else if (auto* vvc = dynamic_cast<VVCStreamReader*>(videoReader))
+                        rez = vvc->checkStream(tmpBuffer.get(), len);
+                    else if (auto* av1 = dynamic_cast<AV1StreamReader*>(videoReader))
+                        rez = av1->checkStream(tmpBuffer.get(), len);
+                    else if (auto* mpeg2 = dynamic_cast<MPEG2StreamReader*>(videoReader))
+                        rez = mpeg2->checkStream(tmpBuffer.get(), len);
+
+                    if (rez.codecInfo.codecID)
+                    {
+                        dd.discovered = true;
+                        dd.codecName = si.m_codec;
+                        dd.trackID = pid;
+                        dd.streamDescr = rez.streamDescr;
+                        videoReader->fillVideoDiscoveryData(dd);
+                    }
+                }
+            }
+        }
+    }
+
+    return results;
+}
+
+// ---------------------------------------------------------------------------
+
 DetectStreamRez METADemuxer::DetectStreamReader(const BufferedReaderManager& readManager, const string& fileName,
                                                 bool calcDuration)
 {
@@ -802,6 +1053,16 @@ CheckStreamRez METADemuxer::detectTrackReader(uint8_t* tmpBuffer, int len,
     if (rez.codecInfo.codecID)
         return rez;
 
+    auto flacCodec = std::make_unique<FLACStreamReader>();
+    rez = flacCodec->checkStream(tmpBuffer, len, containerType, containerDataType, containerStreamIndex);
+    if (rez.codecInfo.codecID)
+        return rez;
+
+    auto opusCodec = std::make_unique<OpusStreamReader>();
+    rez = opusCodec->checkStream(tmpBuffer, len, containerType, containerDataType, containerStreamIndex);
+    if (rez.codecInfo.codecID)
+        return rez;
+
     auto vc1ccodec = std::make_unique<VC1StreamReader>();
     rez = vc1ccodec->checkStream(tmpBuffer, len);
     if (rez.codecInfo.codecID)
@@ -1009,6 +1270,10 @@ AbstractStreamReader* METADemuxer::createCodec(const string& codecName, const ma
         rez = new LPCMStreamReader();
     else if (codecName == "A_MLP")
         rez = new MLPStreamReader();
+    else if (codecName == "A_FLAC")
+        rez = new FLACStreamReader();
+    else if (codecName == "A_OPUS")
+        rez = new OpusStreamReader();
     else if (codecName == "A_DTS")
     {
         rez = new DTSStreamReader();
@@ -1399,6 +1664,18 @@ void ContainerToReaderWrapper::terminate()
 {
     m_terminated = true;
     for (const auto& demuxer : m_demuxers) demuxer.second.m_demuxer->terminate();
+}
+
+const uint8_t* ContainerToReaderWrapper::getTrackCodecPrivate(const uint32_t readerID, int& size)
+{
+    const auto it = m_readerInfo.find(readerID);
+    if (it == m_readerInfo.end())
+    {
+        size = 0;
+        return nullptr;
+    }
+    const ReaderInfo& ri = it->second;
+    return ri.m_demuxerData.m_demuxer->getTrackCodecPrivate(ri.m_pid, size);
 }
 
 void ContainerToReaderWrapper::resetDelayedMark() const

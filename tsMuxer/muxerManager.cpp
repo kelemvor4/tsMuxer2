@@ -130,9 +130,20 @@ void MuxerManager::preinitMux(const std::string& outFileName, FileFactory* fileF
         m_mainMuxer->setMasterMode(m_subMuxer.get(), !mvcTrackFirst);
     }
 
-    for (StreamInfo& si : ci)
+    for (size_t i = 0; i < ci.size(); ++i)
     {
+        StreamInfo& si = ci[i];
         si.read();
+
+        // Apply discovery-phase metadata to the stream reader so that
+        // getTSDescriptor(), getStreamInfo(), etc. have correct values
+        // from the very first packet (channels, sample rate, codec-private,
+        // resolution, FPS, etc.).
+        if (i < m_discoveryData.size() && m_discoveryData[i].discovered)
+        {
+            si.m_streamReader->applyDiscoveryData(m_discoveryData[i]);
+        }
+
         if (si.m_isSubStream && m_allowStereoMux)
         {
             m_subStreamIndex.insert(si.m_streamReader->getStreamIndex());
@@ -201,6 +212,12 @@ void MuxerManager::checkTrackList(const vector<StreamInfo>& ci) const
 
 void MuxerManager::doMux(const string& outFileName, FileFactory* fileFactory)
 {
+    // Run the discovery phase: probe all tracks to collect metadata
+    // (channels, sample rate, resolution, codec-private, etc.) before
+    // the main mux pipeline starts.  This is self-contained -- all
+    // temporary I/O is closed before discoverStreams() returns.
+    m_discoveryData = m_metaDemuxer.discoverStreams();
+
     preinitMux(outFileName, fileFactory);
 
     m_fileWriter = std::make_unique<BufferedFileWriter>();

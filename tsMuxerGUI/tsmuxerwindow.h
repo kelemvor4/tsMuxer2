@@ -149,6 +149,10 @@ class TsMuxerWindow : public QWidget
     QString getDefaultOutputFileName() const;
     void updateCurrentColor(int dr, int dg, int db, int rowIndex);
     void colorizeCurrentRow(const QtvCodecInfo* codecInfo, int rowIndex = -1);
+    void colorizeAllRows();
+    /// Returns true if the given audio codec is incompatible with the
+    /// currently selected output format (e.g. FLAC in TS, Opus in M2TS).
+    bool isCodecIncompatibleWithFormat(const QString& programName) const;
 
     void addTrackToDefaultComboBox(int trackRowIdx);
     void removeTrackFromDefaultComboBox(int trackRowIdx);

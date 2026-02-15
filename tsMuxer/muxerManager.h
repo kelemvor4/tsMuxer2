@@ -99,6 +99,9 @@ class MuxerManager final
     bool m_bluRayMode;
     bool m_demuxMode;
     bool m_reproducibleIsoHeader = false;
+
+    /// Results of the discovery (probe) phase, indexed by stream index.
+    std::vector<StreamDiscoveryData> m_discoveryData;
 };
 
 #endif  // _MUXER_MANAGER_H_

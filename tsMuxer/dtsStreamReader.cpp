@@ -429,6 +429,29 @@ int DTSStreamReader::decodeHdInfo(uint8_t* buff, const uint8_t* end)
     }
 }
 
+void DTSStreamReader::fillDiscoveryData(StreamDiscoveryData& data)
+{
+    SimplePacketizerReader::fillDiscoveryData(data);  // sampleRate, channels
+    data.bitrate = pi_bit_rate;
+    data.bitsPerSample = hd_bitDepth;
+}
+
+void DTSStreamReader::applyDiscoveryData(const StreamDiscoveryData& data)
+{
+    if (data.sampleRate > 0)
+    {
+        pi_sample_rate = data.sampleRate;
+    }
+    if (data.channels > 0)
+    {
+        pi_channels = static_cast<uint8_t>(data.channels);
+    }
+    if (data.bitrate > 0)
+    {
+        pi_bit_rate = data.bitrate;
+    }
+}
+
 bool DTSStreamReader::isPriorityData(AVPacket* packet)
 {
     return packet->size >= 2 && ((packet->data[0] == 0x7f && packet->data[1] == 0xfe) ||

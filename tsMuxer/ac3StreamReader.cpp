@@ -8,6 +8,22 @@
 #include "bitStream.h"
 #include "vod_common.h"
 
+void AC3StreamReader::fillDiscoveryData(StreamDiscoveryData& data)
+{
+    SimplePacketizerReader::fillDiscoveryData(data);  // sampleRate, channels
+    data.bitrate = m_bit_rate;
+}
+
+void AC3StreamReader::applyDiscoveryData(const StreamDiscoveryData& data)
+{
+    if (data.sampleRate > 0)
+        m_sample_rate = data.sampleRate;
+    if (data.channels > 0)
+        m_channels = static_cast<uint8_t>(data.channels);
+    if (data.bitrate > 0)
+        m_bit_rate = data.bitrate;
+}
+
 bool AC3StreamReader::isPriorityData(AVPacket* packet)
 {
     return (packet->size >= 2 && packet->data[0] == 0x0B && packet->data[1] == 0x77 && m_strmtyp != 1);

@@ -3,6 +3,20 @@
 
 #include <sstream>
 
+void MpegAudioStreamReader::fillDiscoveryData(StreamDiscoveryData& data)
+{
+    SimplePacketizerReader::fillDiscoveryData(data);  // sampleRate, channels
+    data.bitrate = m_bit_rate;
+}
+
+void MpegAudioStreamReader::applyDiscoveryData(const StreamDiscoveryData& data)
+{
+    if (data.sampleRate > 0)
+        m_sample_rate = data.sampleRate;
+    if (data.bitrate > 0)
+        m_bit_rate = data.bitrate;
+}
+
 int MpegAudioStreamReader::getTSDescriptor(uint8_t* dstBuff, bool blurayMode, bool hdmvDescriptors)
 {
     uint8_t* frame = findFrame(m_buffer, m_bufEnd);

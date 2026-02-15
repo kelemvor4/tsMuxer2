@@ -11,6 +11,8 @@ class AACStreamReader final : public SimplePacketizerReader, public AACCodec
     int getTSDescriptor(uint8_t* dstBuff, bool blurayMode, bool hdmvDescriptors) override;
     int getFreq() override { return m_sample_rate; }
     uint8_t getChannels() override { return m_channels; }
+    void applyDiscoveryData(const StreamDiscoveryData& data) override;
+    void fillDiscoveryData(StreamDiscoveryData& data) override;
 
    protected:
     int getHeaderLen() override;

@@ -393,6 +393,13 @@ void TSMuxer::intAddStream(const std::string& streamName, const std::string& cod
         m_pmt.pidList[tsStreamIndex] =
             PMTStreamInfo(audioType, tsStreamIndex, descrBuffer, descriptorLen, codecReader, lang, isSecondary);
     }
+    else if (codecName == "A_OPUS")
+    {
+        // ETSI TS 101 154: Opus uses stream_type 0x06 (PRIVATE_DATA) with
+        // registration_descriptor 'Opus' and opus_audio_descriptor in the PMT.
+        m_pmt.pidList[tsStreamIndex] = PMTStreamInfo(StreamType::PRIVATE_DATA, tsStreamIndex, descrBuffer,
+                                                     descriptorLen, codecReader, lang, isSecondary);
+    }
     else
         THROW(ERR_UNKNOWN_CODEC, "Unsupported codec " << codecName << " for TS/M2TS muxing.")
 

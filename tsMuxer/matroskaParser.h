@@ -215,6 +215,8 @@ constexpr auto MATROSKA_CODEC_ID_AUDIO_EAC3 = "A_EAC3";
 constexpr auto MATROSKA_CODEC_ID_AUDIO_TRUEHD = "A_TRUEHD";
 constexpr auto MATROSKA_CODEC_ID_AUDIO_MPEG_L3 = "A_MPEG/L3";
 constexpr auto MATROSKA_CODEC_ID_VIDEO_MPEG2 = "V_MPEG2";
+constexpr auto MATROSKA_CODEC_ID_AUDIO_FLAC = "A_FLAC";
+constexpr auto MATROSKA_CODEC_ID_AUDIO_OPUS = "A_OPUS";
 
 /* max. depth in the EBML tree structure */
 constexpr auto EBML_MAX_DEPTH = 16;
@@ -327,6 +329,30 @@ class ParsedVC1TrackData final : public ParsedTrackPrivData
    private:
     std::vector<uint8_t> m_seqHeader;
     bool m_firstPacket;
+};
+
+class ParsedFLACTrackData final : public ParsedTrackPrivData
+{
+   public:
+    ParsedFLACTrackData(uint8_t* buff, int size);
+    ~ParsedFLACTrackData() override = default;
+    void extractData(AVPacket* pkt, uint8_t* buff, int size) override;
+
+   private:
+    bool m_firstPacket;
+    std::vector<uint8_t> m_codecPrivate;
+};
+
+class ParsedOpusTrackData final : public ParsedTrackPrivData
+{
+   public:
+    ParsedOpusTrackData(uint8_t* buff, int size);
+    ~ParsedOpusTrackData() override = default;
+    void extractData(AVPacket* pkt, uint8_t* buff, int size) override;
+
+   private:
+    bool m_firstPacket;
+    std::vector<uint8_t> m_codecPrivate;
 };
 
 class ParsedPGTrackData final : public ParsedTrackPrivData

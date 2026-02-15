@@ -13,6 +13,8 @@ class MpegAudioStreamReader final : public SimplePacketizerReader, MP3Codec
     [[nodiscard]] int getLayer() const { return m_layer; }
     int getFreq() override { return m_sample_rate; }
     uint8_t getChannels() override { return 2; }
+    void applyDiscoveryData(const StreamDiscoveryData& data) override;
+    void fillDiscoveryData(StreamDiscoveryData& data) override;
 
    protected:
     int getHeaderLen() override { return MPEG_AUDIO_HEADER_SIZE; }

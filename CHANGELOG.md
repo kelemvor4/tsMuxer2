@@ -18,6 +18,12 @@
 - Updated all GUI translations (DE, ES, FR, HE, RU, ZH) with MKV muxing strings
 - Added missing Matroska codec ID constants (A_DTS, A_EAC3, A_TRUEHD, A_MPEG/L3, V_MPEG2)
 - Fixed aspect ratio override (`ar` parameter in metafile) being ignored for MPEG-2 and other video streams, so the original stream aspect ratio was always retained
+- Added Opus audio codec support for MPEG-TS and MKV muxing, including OpusHead codec-private handling and TS descriptor generation per RFC 7845
+- Added FLAC audio codec support for MKV muxing and demux output, including STREAMINFO codec-private parsing
+- Introduced a stream discovery phase that probes all tracks before muxing begins, collecting codec properties (channels, sample rate, resolution, HDR metadata, codec-private data) upfront to prevent late-initialization bugs in container headers
+- Generalized early codec-private propagation from containers (MKV, MP4/MOV) to all stream readers via `applyDiscoveryData()`, replacing the previous Opus-specific workaround
+- Added `getTrackCodecPrivate()` support for MP4/MOV containers
+- Added FLAC and Opus codec entries to USAGE documentation
 
 ## tsMuxeR 2.7.1
 - Fixed file dialogs not appearing on macOS with Qt6 by using non-native dialogs

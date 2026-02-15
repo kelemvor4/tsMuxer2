@@ -69,6 +69,14 @@ void SingleFileMuxer::intAddStream(const std::string& streamName, const std::str
     {
         fileExt = ".wav";
     }
+    else if (codecName == "A_FLAC")
+    {
+        fileExt = ".flac";
+    }
+    else if (codecName == "A_OPUS")
+    {
+        fileExt = ".opus";
+    }
     else if (codecName == "A_AC3")
     {
         const auto ac3Reader = dynamic_cast<AC3StreamReader*>(codecReader);
@@ -190,7 +198,7 @@ void SingleFileMuxer::writeOutBuffer(StreamInfo* streamInfo)
         constexpr int toFileLen = blockSize & 0xffff0000;
         if (m_owner->isAsyncMode())
         {
-            const auto newBuf = new uint8_t[blockSize + MAX_AV_PACKET_SIZE];
+            const auto newBuf = new uint8_t[blockSize + MAX_AV_PACKET_SIZE + ADD_DATA_SIZE];
             memcpy(newBuf, streamInfo->m_buffer + toFileLen, streamInfo->m_bufLen - toFileLen);
             m_owner->asyncWriteBuffer(this, streamInfo->m_buffer, toFileLen, &streamInfo->m_file);
             streamInfo->m_buffer = newBuf;
@@ -252,6 +260,27 @@ bool SingleFileMuxer::muxPacket(AVPacket& avPacket)
     m_lastIndex = avPacket.stream_index;
     streamInfo->m_dts = avPacket.dts;
     streamInfo->m_pts = avPacket.pts;
+
+    // If the frame would overflow the output buffer, force a flush first.
+    // The buffer is blockSize + MAX_AV_PACKET_SIZE + ADD_DATA_SIZE; frames
+    // larger than MAX_AV_PACKET_SIZE (e.g. multichannel FLAC) need this.
+    constexpr int bufCapacity = DEFAULT_FILE_BLOCK_SIZE + MAX_AV_PACKET_SIZE + ADD_DATA_SIZE;
+    if (streamInfo->m_bufLen + avPacket.size > bufCapacity && streamInfo->m_bufLen > 0)
+    {
+        if (m_owner->isAsyncMode())
+        {
+            const auto newBuf = new uint8_t[bufCapacity];
+            m_owner->asyncWriteBuffer(this, streamInfo->m_buffer, streamInfo->m_bufLen, &streamInfo->m_file);
+            streamInfo->m_buffer = newBuf;
+        }
+        else
+        {
+            m_owner->syncWriteBuffer(this, streamInfo->m_buffer, streamInfo->m_bufLen, &streamInfo->m_file);
+        }
+        streamInfo->m_totalWrited += streamInfo->m_bufLen;
+        streamInfo->m_bufLen = 0;
+    }
+
     memcpy(streamInfo->m_buffer + streamInfo->m_bufLen, avPacket.data, avPacket.size);
     streamInfo->m_bufLen += avPacket.size;
     writeOutBuffer(streamInfo);

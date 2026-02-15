@@ -6,6 +6,7 @@
 #include "avCodecs.h"
 #include "avPacket.h"
 #include "pesPacket.h"
+#include "streamDiscoveryData.h"
 
 // Abstract class for reading codec data from a file
 // Used to synchronize and mux data streams
@@ -76,6 +77,12 @@ class AbstractStreamReader : public BaseAbstractStreamReader
     void setIsSecondary(const bool value) { m_secondary = value; }
     void setPipParams(const PIPParams& params) { m_pipParams = params; }
     [[nodiscard]] PIPParams getPipParams() const { return m_pipParams; }
+
+    /// Pre-populate internal state from discovery-phase metadata so that
+    /// getTSDescriptor(), getStreamInfo(), etc. return correct values from the
+    /// very first packet.  Default is a no-op; stream readers that have
+    /// late-initialized properties override this.
+    virtual void applyDiscoveryData(const StreamDiscoveryData& /*data*/) {}
 
    protected:
     ContainerType m_containerType;

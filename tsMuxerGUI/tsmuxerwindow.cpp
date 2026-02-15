@@ -783,12 +783,86 @@ void TsMuxerWindow::updateCurrentColor(int dr, int dg, int db, int row)
     }
 }
 
+bool TsMuxerWindow::isCodecIncompatibleWithFormat(const QString& programName) const
+{
+    // FLAC: only supported for MKV and Demux output
+    if (programName == "A_FLAC")
+        return !(ui->radioButtonMKV->isChecked() || ui->radioButtonDemux->isChecked());
+
+    // Opus: supported for MKV, TS, and Demux output (not M2TS / Blu-ray)
+    if (programName == "A_OPUS")
+        return !(ui->radioButtonMKV->isChecked() || ui->radioButtonDemux->isChecked() ||
+                 ui->radioButtonTS->isChecked());
+
+    return false;
+}
+
 void TsMuxerWindow::colorizeCurrentRow(const QtvCodecInfo* codecInfo, int rowIndex)
 {
-    if (codecInfo->isSecondary)
-        updateCurrentColor(-40, 0, 0, rowIndex);
+    if (rowIndex == -1)
+        rowIndex = ui->trackLV->currentRow();
+    if (rowIndex == -1)
+        return;
+
+    // Check if this audio codec is incompatible with the selected output format
+    const bool codecIncompat = isCodecIncompatibleWithFormat(codecInfo->programName);
+
+    if (codecIncompat)
+    {
+        updateCurrentColor(-40, 0, 0, rowIndex);  // red tint
+
+        // Update the codec column to show the warning
+        QTableWidgetItem* codecItem = ui->trackLV->item(rowIndex, 2);
+        if (codecItem && !codecItem->text().contains(tr("(incompatible)")))
+            codecItem->setText(codecInfo->displayName + " " + tr("(incompatible)"));
+
+        // Set a tooltip on the whole row — codec-specific message
+        QString tip;
+        if (codecInfo->programName == "A_FLAC")
+            tip = tr("%1 is only supported for MKV and Demux output. "
+                     "This track will be ignored for the selected output format.")
+                      .arg(codecInfo->displayName);
+        else
+            tip = tr("%1 is not supported for M2TS or Blu-ray output. "
+                     "This track will be ignored for the selected output format.")
+                      .arg(codecInfo->displayName);
+        for (int col = 0; col < ui->trackLV->columnCount(); ++col)
+        {
+            QTableWidgetItem* item = ui->trackLV->item(rowIndex, col);
+            if (item)
+                item->setToolTip(tip);
+        }
+    }
     else
-        updateCurrentColor(0, 0, 0, rowIndex);
+    {
+        if (codecInfo->isSecondary)
+            updateCurrentColor(-40, 0, 0, rowIndex);
+        else
+            updateCurrentColor(0, 0, 0, rowIndex);
+
+        // Restore the codec column text if it had the warning
+        QTableWidgetItem* codecItem = ui->trackLV->item(rowIndex, 2);
+        if (codecItem && codecItem->text().contains(tr("(incompatible)")))
+            codecItem->setText(codecInfo->displayName);
+
+        // Clear tooltip
+        for (int col = 0; col < ui->trackLV->columnCount(); ++col)
+        {
+            QTableWidgetItem* item = ui->trackLV->item(rowIndex, col);
+            if (item)
+                item->setToolTip(QString());
+        }
+    }
+}
+
+void TsMuxerWindow::colorizeAllRows()
+{
+    for (int i = 0; i < ui->trackLV->rowCount(); ++i)
+    {
+        auto codecInfo = getCodecInfo(i);
+        if (codecInfo)
+            colorizeCurrentRow(codecInfo, i);
+    }
 }
 
 void TsMuxerWindow::addTrackToDefaultComboBox(int trackRowIdx)
@@ -1179,10 +1253,10 @@ void TsMuxerWindow::modifyOutFileName(const QString fileName)
 
     QString existingName = QDir::toNativeSeparators(ui->outFileName->text());
     QFileInfo fiDst(existingName);
-    if (fiDst.completeBaseName() == "default")
+    if (fiDst.completeBaseName() == "default" || existingName.isEmpty())
     {
         QString dstPath;
-        if (existingName.contains(QDir::separator()))
+        if (!existingName.isEmpty() && existingName.contains(QDir::separator()))
             dstPath = QDir::toNativeSeparators(fiDst.absolutePath());
         else
             dstPath = getOutputDir();
@@ -1992,6 +2066,10 @@ void TsMuxerWindow::updateMetaLines()
         if (!codecInfo)
             continue;
 
+        // Force-disable audio tracks when the output format doesn't support them
+        if (isCodecIncompatibleWithFormat(codecInfo->programName))
+            prefix = "#";
+
         postfix.clear();
         if (codecInfo->programName.startsWith('S'))
         {
@@ -2391,6 +2469,7 @@ void TsMuxerWindow::RadioButtonMuxClick()
     ui->DiskLabel->setVisible(ui->radioButtonBluRayISO->isChecked());
     ui->DiskLabelEdit->setVisible(ui->radioButtonBluRayISO->isChecked());
     ui->editDelay->setEnabled(!ui->radioButtonDemux->isChecked());
+    colorizeAllRows();
     updateMetaLines();
     outFileNameDisableChange = false;
 }

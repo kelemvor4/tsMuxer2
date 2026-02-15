@@ -40,6 +40,12 @@ VVCStreamReader::~VVCStreamReader()
     delete m_slice;
 }
 
+void VVCStreamReader::applyDiscoveryData(const StreamDiscoveryData& data)
+{
+    if (data.fps > 0.0 && m_fps == 0.0)
+        setFPS(data.fps);
+}
+
 CheckStreamRez VVCStreamReader::checkStream(uint8_t* buffer, const int len)
 {
     CheckStreamRez rez;
@@ -168,7 +174,12 @@ void VVCStreamReader::updateStreamFps(void* nalUnit, uint8_t* buff, uint8_t* nex
     const int oldNalSize = static_cast<int>(nextNal - buff);
     m_vpsSizeDiff = 0;
     const auto vps = static_cast<VvcVpsUnit*>(nalUnit);
-    vps->setFPS(m_fps);
+    if (!vps->setFPS(m_fps))
+    {
+        // FPS override failed (missing timing info or buffer too small).
+        // Leave the stream unmodified rather than crashing.
+        return;
+    }
     auto tmpBuffer = std::make_unique<uint8_t[]>(vps->nalBufferLen() + 16);
     const long newSpsLen = vps->serializeBuffer(tmpBuffer.get(), tmpBuffer.get() + vps->nalBufferLen() + 16);
     if (newSpsLen == -1)

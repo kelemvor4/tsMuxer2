@@ -27,6 +27,7 @@ enum class TSDescriptorTag
     HEVC = 0x38,
     VVC = 0x39,
     DTS = 0x73,
+    DVB_EXTENSION = 0x7F,  // DVB extension_descriptor (used for opus_audio_descriptor)
     LPCM = 0x80,
     AC3 = 0x81,
     EAC3 = 0xCC
@@ -289,7 +290,9 @@ struct TS_program_map_section
     uint32_t serialize(uint8_t* buffer, int max_buf_size, bool blurayMode, bool hdmvDescriptors);
 
    private:
-    static void extractDescriptors(uint8_t* curPos, int es_info_len, PMTStreamInfo& pmtInfo);
+    /// Extract per-stream descriptors.  Returns the registration_descriptor
+    /// format_identifier (4-byte big-endian tag) if present, otherwise 0.
+    static uint32_t extractDescriptors(uint8_t* curPos, int es_info_len, PMTStreamInfo& pmtInfo);
     void extractPMTDescriptors(uint8_t* curPos, int es_info_len);
     // uint32_t tmpAvCrc[257];
 };
