@@ -424,6 +424,7 @@ TsMuxerWindow::TsMuxerWindow()
 
     langCodesModel = new LangCodesModel(this);
     ui->langComboBox->setModel(langCodesModel);
+    ui->videoLangComboBox->setModel(langCodesModel);
 
     void (QSpinBox::*spinBoxValueChanged)(int) = &QSpinBox::valueChanged;
     void (QDoubleSpinBox::*doubleSpinBoxValueChanged)(double) = &QDoubleSpinBox::valueChanged;
@@ -446,6 +447,7 @@ TsMuxerWindow::TsMuxerWindow()
     connect(ui->comboBoxFPS, comboBoxIndexChanged, this, &TsMuxerWindow::onVideoComboBoxChanged);
     connect(ui->comboBoxLevel, comboBoxIndexChanged, this, &TsMuxerWindow::onVideoComboBoxChanged);
     connect(ui->comboBoxAR, comboBoxIndexChanged, this, &TsMuxerWindow::onVideoComboBoxChanged);
+    connect(ui->videoLangComboBox, comboBoxIndexChanged, this, &TsMuxerWindow::onVideoComboBoxChanged);
     connect(ui->checkBoxKeepFps, &QCheckBox::checkStateChanged, this, &TsMuxerWindow::onAudioSubtitlesParamsChanged);
     connect(ui->dtsDwnConvert, &QCheckBox::checkStateChanged, this, &TsMuxerWindow::onAudioSubtitlesParamsChanged);
     connect(ui->secondaryCheckBox, &QCheckBox::checkStateChanged, this, &TsMuxerWindow::onAudioSubtitlesParamsChanged);
@@ -745,6 +747,12 @@ void TsMuxerWindow::onVideoComboBoxChanged(int)
     codecInfo->fpsText = ui->comboBoxFPS->itemText(ui->comboBoxFPS->currentIndex());
     codecInfo->levelText = ui->comboBoxLevel->itemText(ui->comboBoxLevel->currentIndex());
     codecInfo->arText = ui->comboBoxAR->currentData().toString();
+    QString langAddr = ui->videoLangComboBox->itemData(ui->videoLangComboBox->currentIndex()).toString();
+    if (!langAddr.isEmpty())
+        codecInfo->lang = langAddr;
+    else
+        codecInfo->lang.clear();
+    ui->trackLV->item(ui->trackLV->currentRow(), 3)->setText(codecInfo->lang);
     updateMetaLines();
 }
 
@@ -1150,6 +1158,7 @@ void TsMuxerWindow::trackLVItemSelectionChanged()
             ui->comboBoxAR->setEnabled(true);
             ui->labelAR->setEnabled(ui->comboBoxAR->isEnabled());
             ui->checkBoxSecondaryVideo->setEnabled(codecInfo->displayName != "MVC");
+            ui->videoLangComboBox->setCurrentIndex(findLangByCode(codecInfo->lang));
         }
         else
         {
