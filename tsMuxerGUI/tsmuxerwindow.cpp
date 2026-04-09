@@ -454,6 +454,8 @@ TsMuxerWindow::TsMuxerWindow()
     connect(ui->dtsDwnConvert, &QCheckBox::checkStateChanged, this, &TsMuxerWindow::onAudioSubtitlesParamsChanged);
     connect(ui->secondaryCheckBox, &QCheckBox::checkStateChanged, this, &TsMuxerWindow::onAudioSubtitlesParamsChanged);
     connect(ui->mergeAc3TrackSpinBox, spinBoxValueChanged, this, &TsMuxerWindow::onAudioSubtitlesParamsChanged);
+    connect(ui->mergeAc3FileLineEdit, &QLineEdit::textChanged, this, &TsMuxerWindow::onAudioSubtitlesParamsChanged);
+    connect(ui->mergeAc3FileBrowseButton, &QPushButton::clicked, this, &TsMuxerWindow::onMergeAc3FileBrowseClicked);
     connect(ui->langComboBox, comboBoxIndexChanged, this, &TsMuxerWindow::onAudioSubtitlesParamsChanged);
     connect(ui->offsetsComboBox, comboBoxIndexChanged, this, &TsMuxerWindow::onAudioSubtitlesParamsChanged);
     connect(ui->comboBoxPipCorner, comboBoxIndexChanged, this, &TsMuxerWindow::onSavedParamChanged);
@@ -1018,11 +1020,32 @@ void TsMuxerWindow::onAudioSubtitlesParamsChanged()
         codecInfo->lang.clear();
     }
 
-    // TrueHD + AC-3 merge (CLI meta parameter on A_MLP only)
+    // TrueHD + AC-3 merge (CLI meta parameters on A_MLP only)
     if (codecInfo->programName == "A_MLP")
+    {
         codecInfo->mergeAc3Track = ui->mergeAc3TrackSpinBox->value();
+        codecInfo->mergeAc3File = ui->mergeAc3FileLineEdit->text().trimmed();
+
+        // Mutual exclusion: prefer track merge when set; otherwise allow file merge.
+        if (codecInfo->mergeAc3Track > 0)
+        {
+            codecInfo->mergeAc3File.clear();
+            ui->mergeAc3FileLineEdit->blockSignals(true);
+            ui->mergeAc3FileLineEdit->setText(QString());
+            ui->mergeAc3FileLineEdit->blockSignals(false);
+        }
+        else if (!codecInfo->mergeAc3File.isEmpty())
+        {
+            ui->mergeAc3TrackSpinBox->blockSignals(true);
+            ui->mergeAc3TrackSpinBox->setValue(0);
+            ui->mergeAc3TrackSpinBox->blockSignals(false);
+        }
+    }
     else
+    {
         codecInfo->mergeAc3Track = 0;
+        codecInfo->mergeAc3File.clear();
+    }
 
     ui->trackLV->item(ui->trackLV->currentRow(), 3)->setText(codecInfo->lang);
     colorizeCurrentRow(codecInfo);
@@ -1199,15 +1222,27 @@ void TsMuxerWindow::trackLVItemSelectionChanged()
             ui->offsetsComboBox->setCurrentIndex(codecInfo->offsetId + 1);
             ui->dtsDwnConvert->setVisible(codecInfo->displayName != "PGS" && codecInfo->displayName != "SRT");
             ui->secondaryCheckBox->setVisible(ui->dtsDwnConvert->isVisible());
-            const bool showMergeAc3 =
-                (codecInfo->programName == "A_MLP" && codecInfo->displayName == "TRUE-HD" && codecInfo->trackID != 0);
-            ui->mergeAc3TrackLabel->setVisible(showMergeAc3);
-            ui->mergeAc3TrackSpinBox->setVisible(showMergeAc3);
-            ui->mergeAc3TrackSpinBox->setEnabled(showMergeAc3);
-            if (showMergeAc3)
+            const bool isTrueHd = (codecInfo->programName == "A_MLP" && codecInfo->displayName == "TRUE-HD");
+            const bool showMergeTrack = (isTrueHd && codecInfo->trackID != 0);
+            const bool showMergeFile = isTrueHd;
+
+            ui->mergeAc3TrackLabel->setVisible(showMergeTrack);
+            ui->mergeAc3TrackSpinBox->setVisible(showMergeTrack);
+            ui->mergeAc3TrackSpinBox->setEnabled(showMergeTrack);
+            if (showMergeTrack)
                 ui->mergeAc3TrackSpinBox->setValue(codecInfo->mergeAc3Track);
             else
                 ui->mergeAc3TrackSpinBox->setValue(0);
+
+            ui->mergeAc3FileLabel->setVisible(showMergeFile);
+            ui->mergeAc3FileLineEdit->setVisible(showMergeFile);
+            ui->mergeAc3FileBrowseButton->setVisible(showMergeFile);
+            ui->mergeAc3FileLineEdit->setEnabled(showMergeFile);
+            ui->mergeAc3FileBrowseButton->setEnabled(showMergeFile);
+            if (showMergeFile)
+                ui->mergeAc3FileLineEdit->setText(codecInfo->mergeAc3File);
+            else
+                ui->mergeAc3FileLineEdit->setText(QString());
 
             bool isPGS = codecInfo->displayName == "PGS";
             ui->checkBoxKeepFps->setVisible(isPGS);
@@ -2059,6 +2094,26 @@ void TsMuxerWindow::onLanguageComboBoxIndexChanged(int idx)
     writeSettings();
 }
 
+void TsMuxerWindow::onMergeAc3FileBrowseClicked()
+{
+    if (disableUpdatesCnt)
+        return;
+    QtvCodecInfo* codecInfo = getCurrentCodec();
+    if (!codecInfo || codecInfo->programName != "A_MLP")
+        return;
+
+    const QString startDir = (!codecInfo->fileList.isEmpty()) ? QFileInfo(codecInfo->fileList[0]).absolutePath() : lastInputDir;
+    const QString fileName = QFileDialog::getOpenFileName(this, tr("Select AC-3 file"), startDir,
+                                                         tr("AC-3 audio (*.ac3);;All files (*)"));
+    if (fileName.isEmpty())
+        return;
+
+    disableUpdatesCnt++;
+    ui->mergeAc3FileLineEdit->setText(QDir::toNativeSeparators(fileName));
+    disableUpdatesCnt--;
+    onAudioSubtitlesParamsChanged();
+}
+
 void TsMuxerWindow::updateMetaLines()
 {
     if (!m_updateMeta || disableUpdatesCnt > 0)
@@ -2132,6 +2187,10 @@ void TsMuxerWindow::updateMetaLines()
         {
             if (codecInfo->mergeAc3Track != codecInfo->trackID)
                 postfix += QString(", merge-ac3-track=") + QString::number(codecInfo->mergeAc3Track);
+        }
+        else if (codecInfo->programName == "A_MLP" && !codecInfo->mergeAc3File.isEmpty())
+        {
+            postfix += QString(", merge-ac3-file=") + quoteStr(codecInfo->mergeAc3File);
         }
         if (!codecInfo->lang.isEmpty())
             postfix += QString(", lang=") + codecInfo->lang;

@@ -20,10 +20,12 @@ TrueHDAC3MergeReader::TrueHDAC3MergeReader(const std::map<std::string, std::stri
       m_pendingEmitSamples(0),
       m_pendingEmitSampleRate(0)
 {
-    const auto it = addParams.find("merge-ac3-track");
-    if (it == addParams.end() || it->second.empty())
-        THROW(ERR_INVALID_CODEC_FORMAT, "internal: TrueHDAC3MergeReader without merge-ac3-track")
-    m_mergeAc3Pid = strToInt32(it->second.c_str());
+    const auto itTrack = addParams.find("merge-ac3-track");
+    const auto itFile = addParams.find("merge-ac3-file");
+    if ((itTrack == addParams.end() || itTrack->second.empty()) && (itFile == addParams.end() || itFile->second.empty()))
+        THROW(ERR_INVALID_CODEC_FORMAT, "internal: TrueHDAC3MergeReader without merge-ac3-* source")
+    if (itTrack != addParams.end() && !itTrack->second.empty())
+        m_mergeAc3Pid = strToInt32(itTrack->second.c_str());
 }
 
 const CodecInfo& TrueHDAC3MergeReader::getCodecInfo() { return trueHDCodecInfo; }

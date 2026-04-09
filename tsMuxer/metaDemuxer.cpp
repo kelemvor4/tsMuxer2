@@ -202,19 +202,30 @@ void METADemuxer::openFile(const string& streamName)
         string codec = trimStr(params[0]);
         string codecStreamName = trimStr(params[1]);
         codec = strToUpperCase(codec);
-        if (codec == "A_MLP" && addParams.find("merge-ac3-track") != addParams.end())
+        if (codec == "A_MLP" &&
+            (addParams.find("merge-ac3-track") != addParams.end() || addParams.find("merge-ac3-file") != addParams.end()))
         {
-            const int thdPid =
-                addParams.find("track") != addParams.end() ? strToInt32(addParams.at("track").c_str()) : 0;
-            const int ac3Pid = strToInt32(addParams.at("merge-ac3-track").c_str());
-            if (thdPid == 0)
-                THROW(ERR_INVALID_CODEC_FORMAT,
-                      "A_MLP with merge-ac3-track requires track=<TrueHD Matroska track number>.")
-            if (ac3Pid <= 0)
-                THROW(ERR_INVALID_CODEC_FORMAT, "merge-ac3-track must be a positive Matroska track number.")
-            if (ac3Pid == thdPid)
-                THROW(ERR_INVALID_CODEC_FORMAT,
-                      "merge-ac3-track must be a different track number than the TrueHD track= parameter.")
+            const bool haveTrack =
+                addParams.find("merge-ac3-track") != addParams.end() && !addParams.at("merge-ac3-track").empty();
+            const bool haveFile =
+                addParams.find("merge-ac3-file") != addParams.end() && !addParams.at("merge-ac3-file").empty();
+            if (haveTrack && haveFile)
+                THROW(ERR_INVALID_CODEC_FORMAT, "Specify only one of merge-ac3-track or merge-ac3-file.")
+
+            if (haveTrack)
+            {
+                const int thdPid =
+                    addParams.find("track") != addParams.end() ? strToInt32(addParams.at("track").c_str()) : 0;
+                const int ac3Pid = strToInt32(addParams.at("merge-ac3-track").c_str());
+                if (thdPid == 0)
+                    THROW(ERR_INVALID_CODEC_FORMAT,
+                          "A_MLP with merge-ac3-track requires track=<TrueHD Matroska track number>.")
+                if (ac3Pid <= 0)
+                    THROW(ERR_INVALID_CODEC_FORMAT, "merge-ac3-track must be a positive Matroska track number.")
+                if (ac3Pid == thdPid)
+                    THROW(ERR_INVALID_CODEC_FORMAT,
+                          "merge-ac3-track must be a different track number than the TrueHD track= parameter.")
+            }
         }
         if (!m_HevcFound)
             m_HevcFound = (codec.find("HEVC") == 12);
@@ -581,13 +592,36 @@ int METADemuxer::addStream(const string& codec, const string& codecStreamName, c
 
     if (auto* mergeReader = dynamic_cast<TrueHDAC3MergeReader*>(codecReader))
     {
-        if (dataReader != &m_containerReader)
-            THROW(ERR_INVALID_CODEC_FORMAT,
-                  "merge-ac3-track is only supported when the TrueHD stream is inside a container (e.g. MKV).")
-        const int r2 = m_containerReader.createReader(mergeReader->getTmpBufferSize());
-        if (!m_containerReader.openStream(r2, fileList[0].c_str(), mergeReader->mergeAc3TrackPid(), &ac3CodecInfo))
-            THROW(ERR_CANT_OPEN_STREAM, "Can't open merge-ac3-track stream: " << fileList[0])
-        streamInfo.m_mergeAc3ReaderId = r2;
+        const auto itTrack = addParams.find("merge-ac3-track");
+        const auto itFile = addParams.find("merge-ac3-file");
+        const bool haveTrack = (itTrack != addParams.end() && !itTrack->second.empty());
+        const bool haveFile = (itFile != addParams.end() && !itFile->second.empty());
+        if (haveTrack && haveFile)
+            THROW(ERR_INVALID_CODEC_FORMAT, "Specify only one of merge-ac3-track or merge-ac3-file.")
+
+        if (haveTrack)
+        {
+            if (dataReader != &m_containerReader)
+                THROW(ERR_INVALID_CODEC_FORMAT,
+                      "merge-ac3-track is only supported when the TrueHD stream is inside a container (e.g. MKV).")
+            const int r2 = m_containerReader.createReader(mergeReader->getTmpBufferSize());
+            if (!m_containerReader.openStream(r2, fileList[0].c_str(), mergeReader->mergeAc3TrackPid(), &ac3CodecInfo))
+                THROW(ERR_CANT_OPEN_STREAM, "Can't open merge-ac3-track stream: " << fileList[0])
+            streamInfo.m_mergeAc3ReaderId = r2;
+            streamInfo.m_mergeAc3DataReader = &m_containerReader;
+        }
+        else if (haveFile)
+        {
+            const std::string ac3File = unquoteStr(trimStr(itFile->second));
+            AbstractReader* ac3Reader = m_readManager.getReader(ac3File.c_str());
+            if (ac3Reader == nullptr)
+                THROW(ERR_INVALID_CODEC_FORMAT, "merge-ac3-file: can't open reader for " << ac3File)
+            const int r2 = ac3Reader->createReader(mergeReader->getTmpBufferSize());
+            if (!ac3Reader->openStream(r2, ac3File.c_str(), 0, &ac3CodecInfo))
+                THROW(ERR_CANT_OPEN_STREAM, "Can't open merge-ac3-file stream: " << ac3File)
+            streamInfo.m_mergeAc3ReaderId = r2;
+            streamInfo.m_mergeAc3DataReader = ac3Reader;
+        }
     }
 
     return streamIndex;
@@ -598,7 +632,12 @@ void METADemuxer::readClose()
     for (const auto& codecInfo : m_codecInfo)
     {
         if (codecInfo.m_mergeAc3ReaderId >= 0)
-            codecInfo.m_dataReader->deleteReader(codecInfo.m_mergeAc3ReaderId);
+        {
+            if (codecInfo.m_mergeAc3DataReader)
+                codecInfo.m_mergeAc3DataReader->deleteReader(codecInfo.m_mergeAc3ReaderId);
+            else
+                codecInfo.m_dataReader->deleteReader(codecInfo.m_mergeAc3ReaderId);
+        }
         codecInfo.m_dataReader->deleteReader(codecInfo.m_readerID);
         delete codecInfo.m_streamReader;
     }
@@ -1306,7 +1345,7 @@ AbstractStreamReader* METADemuxer::createCodec(const string& codecName, const ma
         rez = new LPCMStreamReader();
     else if (codecName == "A_MLP")
     {
-        if (addParams.find("merge-ac3-track") != addParams.end())
+        if (addParams.find("merge-ac3-track") != addParams.end() || addParams.find("merge-ac3-file") != addParams.end())
             rez = new TrueHDAC3MergeReader(addParams);
         else
             rez = new MLPStreamReader();
@@ -1594,7 +1633,8 @@ int StreamInfo::read()
             {
                 uint32_t ac3Cnt = 0;
                 int ac3Rez = 0;
-                uint8_t* ac3Data = m_dataReader->readBlock(m_mergeAc3ReaderId, ac3Cnt, ac3Rez);
+                AbstractReader* r = m_mergeAc3DataReader ? m_mergeAc3DataReader : m_dataReader;
+                uint8_t* ac3Data = r->readBlock(m_mergeAc3ReaderId, ac3Cnt, ac3Rez);
                 if (ac3Rez == BufferedFileReader::DATA_NOT_READY || ac3Rez == BufferedFileReader::DATA_DELAYED)
                 {
                     m_lastAVRez = ac3Rez;

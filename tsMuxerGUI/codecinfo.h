@@ -23,6 +23,9 @@ struct QtvCodecInfo
     // For A_MLP (TrueHD) only: when set (>0), adds merge-ac3-track=<n> to the meta line
     // to interleave a separate AC-3 compatibility track from the same MKV.
     int mergeAc3Track = 0;
+    // For A_MLP (TrueHD) only: when non-empty, adds merge-ac3-file="path" to the meta line
+    // to interleave an external AC-3 elementary stream with a standalone TrueHD file.
+    QString mergeAc3File;
     int offsetId = -1;
     int maxPgOffsets = 0;
     QList<QString> fileList;

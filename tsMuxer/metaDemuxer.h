@@ -44,11 +44,13 @@ struct StreamInfo
         m_blockSize = 0;
         m_isSubStream = isSubStream;
         m_mergeAc3ReaderId = -1;
+        m_mergeAc3DataReader = nullptr;
     }
 
     int read();
 
     int m_mergeAc3ReaderId;
+    AbstractReader* m_mergeAc3DataReader;
 
     int m_lastAVRez;
     int64_t m_readCnt;

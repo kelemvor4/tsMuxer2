@@ -101,6 +101,52 @@ down-to-ac3       | Available only for TRUE-HD tracks. Filter out HD part.
 secondary         | Mux as secondary audio.  Available for DD+ and DTS-Express. 
 default           | Mark this track as the default when muxing to Blu-ray.
 stretch           | Stretch audio by a given factor. Can be a decimal value or a fraction (e.g. 25/24). Useful for fixing A/V sync issues caused by frame rate discrepancies.
+merge-ac3-track   | **MKV only, A_MLP only.** Matroska track number of a classic AC-3 stream to interleave with this TrueHD track for Blu-ray-style muxing. Requires `track=<TrueHD track number>`. Do not add the AC-3 track as a separate meta line.
+merge-ac3-file    | **A_MLP only.** Path to an external classic AC-3 (`.ac3`) file to interleave with a standalone TrueHD (`.thd`) stream for Blu-ray-style muxing.
+
+### TrueHD + AC-3 compatibility core merge (MKV)
+
+Some remuxed Blu-ray MKVs store Dolby TrueHD and the AC-3 compatibility track as **separate tracks**. For Blu-ray
+output, tsMuxer can merge them into the Blu-ray style interleaved TrueHD+AC-3 stream during muxing.
+
+- **Important limitation**: the AC-3 must be a **separate Matroska track in the same MKV**. This feature does **not**
+  load an external `.ac3` file and attach it to a TrueHD track directly.
+
+#### Meta file example
+
+```
+MUXOPT --blu-ray
+V_MPEG4/ISO/AVC, "movie.mkv", track=1
+A_MLP, "movie.mkv", track=2, merge-ac3-track=3
+```
+
+#### GUI usage
+
+Select the **TRUE-HD** track, then set:
+- `track=` to the TrueHD Matroska track number
+- **Merge AC-3 track** to the AC-3 Matroska track number
+
+The GUI will emit `merge-ac3-track=<n>` into the meta preview.
+
+#### If the MKV has no AC-3 track
+
+Create an AC-3 compatibility stream from the TrueHD audio with FFmpeg (choose the correct audio index for `0:a:N`):
+
+```
+ffmpeg -i input.mkv -map 0:a:0 -c:a ac3 -b:a 640k -ac 6 compat.ac3
+```
+
+Then **remux** `compat.ac3` back into the MKV as a separate audio track (e.g. with `mkvmerge`), and use
+`merge-ac3-track` with the new AC-3 track number.
+
+### TrueHD (`.thd`) + AC-3 (`.ac3`) merge (elementary streams)
+
+If you have standalone TrueHD and AC-3 files, you can merge them directly:
+
+```
+MUXOPT --blu-ray
+A_MLP, "audio.thd", merge-ac3-file="compat.ac3"
+```
 
 Additional parameters for video tracks:
 

@@ -412,6 +412,10 @@ index for 0:a:N), for example:
 Remux the original MKV streams plus compat.ac3 into one MKV (e.g. mkvmerge), then reference TrueHD with
 track= and the new AC-3 with merge-ac3-track= in the meta file.
 
+TrueHD + AC-3 core merge (elementary streams):
+- merge-ac3-file    Path to an external classic AC-3 file to interleave with a standalone TrueHD (.thd) stream.
+                    Example: A_MLP, "audio.thd", merge-ac3-file="compat.ac3"
+
 Additional parameters for video tracks:
 - fps               The number of frames per second. If not defined, the value
                     is auto detected from the source stream or container

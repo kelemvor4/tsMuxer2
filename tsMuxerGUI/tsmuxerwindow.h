@@ -65,6 +65,7 @@ class TsMuxerWindow : public QWidget
     void onPulldownCheckBoxChanged();
     void onVideoComboBoxChanged(int index);
     void onAudioSubtitlesParamsChanged();
+    void onMergeAc3FileBrowseClicked();
     void onEditDelayChanged(int i);
     void onFontBtnClicked();
     void onColorBtnClicked();
