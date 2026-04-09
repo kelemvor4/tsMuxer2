@@ -2102,9 +2102,10 @@ void TsMuxerWindow::onMergeAc3FileBrowseClicked()
     if (!codecInfo || codecInfo->programName != "A_MLP")
         return;
 
-    const QString startDir = (!codecInfo->fileList.isEmpty()) ? QFileInfo(codecInfo->fileList[0]).absolutePath() : lastInputDir;
-    const QString fileName = QFileDialog::getOpenFileName(this, tr("Select AC-3 file"), startDir,
-                                                         tr("AC-3 audio (*.ac3);;All files (*)"));
+    const QString startDir =
+        (!codecInfo->fileList.isEmpty()) ? QFileInfo(codecInfo->fileList[0]).absolutePath() : lastInputDir;
+    const QString fileName =
+        QFileDialog::getOpenFileName(this, tr("Select AC-3 file"), startDir, tr("AC-3 audio (*.ac3);;All files (*)"));
     if (fileName.isEmpty())
         return;
 

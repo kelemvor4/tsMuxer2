@@ -202,8 +202,8 @@ void METADemuxer::openFile(const string& streamName)
         string codec = trimStr(params[0]);
         string codecStreamName = trimStr(params[1]);
         codec = strToUpperCase(codec);
-        if (codec == "A_MLP" &&
-            (addParams.find("merge-ac3-track") != addParams.end() || addParams.find("merge-ac3-file") != addParams.end()))
+        if (codec == "A_MLP" && (addParams.find("merge-ac3-track") != addParams.end() ||
+                                 addParams.find("merge-ac3-file") != addParams.end()))
         {
             const bool haveTrack =
                 addParams.find("merge-ac3-track") != addParams.end() && !addParams.at("merge-ac3-track").empty();
