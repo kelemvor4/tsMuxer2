@@ -1,10 +1,10 @@
-# tsMuxer
+# tsMuxer2
 
 > **Note:** This is a modernized fork of [justdan96/tsMuxer](https://github.com/justdan96/tsMuxer), updated to C++20 with Qt6 support.
 
 ## Vision
 
-This project is for tsMuxer - a transport stream muxer for remuxing/muxing elementary streams. This is very useful for transcoding and this project is used in other products such as Universal Media Server.
+This project is a fork of tsMuxer - a transport stream muxer for remuxing/muxing elementary streams. This is very useful for transcoding and this project is used in other products such as Universal Media Server.  It is my intention to convert it from c++ to c# because my c++ skills are minimal.  It has been feature stagnant for some time, so I plan to update the feature set. First up is the GUI, which ignores many features of the main tsmusxer program.  After rounding out the feature set of tsmuxergui, I'll work on the main program.  Solid 64 bit, multicore, and GPU support are planned.
 
 EVO/VOB/MPG, MKV/MKA, MP4/MOV, TS, M2TS to TS, M2TS, or MKV.
 
